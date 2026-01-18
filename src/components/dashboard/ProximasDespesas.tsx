@@ -1,57 +1,30 @@
 /**
  * Componente: ProximasDespesas
- * Lista de próximas despesas a vencer
- * Conforme design Figma node 42-3163
+ * Widget de próximas despesas a vencer
+ * 
+ * Funcionalidades:
+ * - Exibe lista cronológica de despesas pendentes (ordenadas por vencimento)
+ * - Mostra: descrição, data de vencimento, conta/cartão de pagamento, valor
+ * - Botão de adicionar nova despesa (abre modal de transação)
+ * - Botão de marcar como paga com animação:
+ *   - Hover: fundo verde claro, borda verde, ícone verde
+ *   - Click: anima botão, remove item com fade out
+ *   - Despesas recorrentes: agenda próxima ocorrência para o mês seguinte
+ *   - Despesas parceladas: atualiza para próxima parcela
+ *   - Despesas únicas: remove da lista
+ *   - Exibe mensagem de confirmação
+ * - Estado vazio com borda tracejada quando não há pendências
  */
 
-interface DespesaItem {
-  id: string
-  title: string
-  dueDate: string
-  paymentMethod: string
-  value: string
-}
+import { useCallback, useState } from 'react'
+import { useFinance } from '@/contexts/FinanceContext'
+import { Bill } from '@/types'
 
-// Dados mockados - em produção viriam do backend
-const despesasData: DespesaItem[] = [
-  {
-    id: '1',
-    title: 'Conta de Luz',
-    dueDate: 'Vence dia 21/01',
-    paymentMethod: 'Crédito Nubank  **** 5897',
-    value: 'R$ 154,00',
-  },
-  {
-    id: '2',
-    title: 'Conta de Luz',
-    dueDate: 'Vence dia 21/01',
-    paymentMethod: 'Crédito Nubank  **** 5897',
-    value: 'R$ 154,00',
-  },
-  {
-    id: '3',
-    title: 'Conta de Luz',
-    dueDate: 'Vence dia 21/01',
-    paymentMethod: 'Crédito Nubank  **** 5897',
-    value: 'R$ 154,00',
-  },
-  {
-    id: '4',
-    title: 'Conta de Luz',
-    dueDate: 'Vence dia 21/01',
-    paymentMethod: 'Crédito Nubank  **** 5897',
-    value: 'R$ 154,00',
-  },
-  {
-    id: '5',
-    title: 'Conta de Luz',
-    dueDate: 'Vence dia 21/01',
-    paymentMethod: 'Crédito Nubank  **** 5897',
-    value: 'R$ 154,00',
-  },
-]
+// ============================================================================
+// ÍCONES
+// ============================================================================
 
-// Ícone de cartão de crédito para o header - conforme Figma
+// Ícone de cartão de crédito para o header
 const CreditCardIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M22 6V18C22 18.5304 21.7893 19.0391 21.4142 19.4142C21.0391 19.7893 20.5304 20 20 20H4C3.46957 20 2.96086 19.7893 2.58579 19.4142C2.21071 19.0391 2 18.5304 2 18V6C2 5.46957 2.21071 4.96086 2.58579 4.58579C2.96086 4.21071 3.46957 4 4 4H20C20.5304 4 21.0391 4.21071 21.4142 4.58579C21.7893 4.96086 22 5.46957 22 6ZM4 8H20V6H4V8ZM4 18H20V10H4V18Z" />
@@ -65,100 +38,320 @@ const PlusIcon = () => (
   </svg>
 )
 
-// Ícone de check
-const CheckIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="#15BE78">
+// Ícone de check (com cor dinâmica)
+const CheckIcon = ({ color = '#15BE78' }: { color?: string }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill={color}>
     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
   </svg>
 )
 
-function DespesaItemCard({ title, dueDate, paymentMethod, value }: Omit<DespesaItem, 'id'>) {
+// Ícone de check circular (estado vazio)
+const CheckCircleIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15BE78" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Formata valor monetário brasileiro
+ */
+function formatCurrency(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
+/**
+ * Formata data de vencimento
+ */
+function formatDueDate(date: Date): string {
+  const d = new Date(date)
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  return `Vence dia ${day}/${month}`
+}
+
+/**
+ * Retorna nome do método de pagamento baseado no accountId
+ * - Conta bancária: "Nubank conta"
+ * - Cartão de crédito: "Crédito Nubank **** 5897"
+ */
+function getPaymentMethodName(
+  accountId: string | null,
+  creditCards: { id: string; name: string; lastDigits?: string }[],
+  bankAccounts: { id: string; name: string }[]
+): string {
+  if (!accountId) return 'Não definido'
+  
+  // Procura nos cartões
+  const card = creditCards.find(c => c.id === accountId)
+  if (card) {
+    return `Crédito ${card.name} **** ${card.lastDigits || '****'}`
+  }
+  
+  // Procura nas contas
+  const account = bankAccounts.find(a => a.id === accountId)
+  if (account) {
+    return `${account.name} conta`
+  }
+  
+  return 'Não definido'
+}
+
+// ============================================================================
+// COMPONENTE: DespesaItemCard
+// ============================================================================
+
+interface DespesaItemCardProps {
+  bill: Bill
+  paymentMethod: string
+  onMarkAsPaid: () => void
+  isRemoving: boolean
+}
+
+function DespesaItemCard({ bill, paymentMethod, onMarkAsPaid, isRemoving }: DespesaItemCardProps) {
+  const [isClicked, setIsClicked] = useState(false)
+
+  // Monta descrição com parcela se aplicável
+  const description = bill.installments && bill.currentInstallment
+    ? `${bill.description} (${bill.currentInstallment}/${bill.installments})`
+    : bill.description
+
+  const handleClick = () => {
+    setIsClicked(true)
+    // Delay para mostrar animação antes de remover
+    setTimeout(() => {
+      onMarkAsPaid()
+    }, 300)
+  }
+
   return (
-    <div className="flex items-start justify-between gap-[16px]">
-      {/* Informações da despesa */}
-      <div className="flex flex-col gap-[4px]">
-        <p className="text-[20px] font-bold leading-[28px] text-text-primary">
-          {title}
+    <div 
+      className={`
+        flex items-start justify-between gap-[16px]
+        py-[16px]
+        border-b border-gray-100 last:border-b-0
+        transition-all duration-300 ease-out
+        ${isRemoving || isClicked ? 'opacity-0 transform -translate-x-4' : 'opacity-100'}
+      `}
+    >
+      {/* Informações da despesa - lado esquerdo */}
+      <div className="flex flex-col gap-[4px] flex-1 min-w-0">
+        {/* Título/descrição - texto negrito médio */}
+        <p className="text-[16px] font-bold leading-[24px] text-text-primary truncate">
+          {description}
         </p>
-        <p className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-text-primary">
-          {dueDate}
+        {/* Data de vencimento - texto menor cinza escuro */}
+        <p className="text-[12px] font-medium leading-[16px] tracking-[0.3px] text-gray-600">
+          {formatDueDate(bill.dueDate)}
         </p>
-        <p className="text-[12px] font-normal leading-[16px] tracking-[0.3px] text-text-primary">
+        {/* Conta/cartão - texto pequeno cinza claro */}
+        <p className="text-[12px] font-normal leading-[16px] tracking-[0.3px] text-gray-400 truncate">
           {paymentMethod}
         </p>
       </div>
       
-      {/* Valor e botão de check */}
-      <div className="flex gap-[12px] items-center shrink-0">
-        <p className="text-[16px] font-semibold leading-[20px] tracking-[0.3px] text-text-primary">
-          {value}
+      {/* Valor e botão de check - lado direito */}
+      <div className="flex flex-col items-end gap-[8px] shrink-0">
+        {/* Valor - texto grande negrito */}
+        <p className="text-[18px] font-bold leading-[24px] text-text-primary">
+          {formatCurrency(bill.value)}
         </p>
+        {/* Botão de check - 32px com animação de hover */}
         <button
-          className="
+          onClick={handleClick}
+          disabled={isClicked}
+          className={`
             w-8 h-8
             rounded-full
-            border border-border-light
-            bg-background-primary
             flex items-center justify-center
-            hover:bg-gray-50
-            transition-colors
-          "
+            transition-all duration-200 ease-out
+            cursor-pointer
+            ${isClicked 
+              ? 'bg-[#15BE78] border-[#15BE78] border-2 scale-110' 
+              : 'bg-transparent border border-gray-300 hover:bg-[#E8F8F0] hover:border-[#15BE78]'
+            }
+          `}
           aria-label="Marcar como pago"
+          title="Marcar como pago"
         >
-          <CheckIcon />
+          <CheckIcon color={isClicked ? '#FFFFFF' : '#15BE78'} />
         </button>
       </div>
     </div>
   )
 }
 
-export default function ProximasDespesas() {
+// ============================================================================
+// COMPONENTE: Estado Vazio
+// ============================================================================
+
+function EmptyState() {
   return (
-    <div
+    <div 
       className="
-        bg-background-primary
-        rounded-[20px]
-        border border-border-light
-        w-full
-        min-w-0
+        flex flex-col items-center justify-center 
+        py-12 px-6
+        border-2 border-dashed border-gray-200
+        rounded-[16px]
+        gap-4
       "
     >
-      <div className="flex flex-col gap-[32px] p-[32px]">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-[8px] items-center">
-            <CreditCardIcon />
-            <h3 className="text-[20px] font-bold leading-[28px] text-text-primary">
-              Próximas despesas
-            </h3>
-          </div>
-          <button
-            className="
-              w-8 h-8
-              flex items-center justify-center
-              text-text-primary
-              hover:opacity-70
-              transition-opacity
-            "
-            aria-label="Adicionar despesa"
-          >
-            <PlusIcon />
-          </button>
-        </div>
+      <CheckCircleIcon />
+      <p className="text-[14px] font-medium text-gray-400 text-center">
+        Nenhuma despesa pendente
+      </p>
+    </div>
+  )
+}
 
-        {/* Lista de despesas */}
-        <div className="flex flex-col gap-[32px]">
-          {despesasData.map((despesa) => (
-            <DespesaItemCard
-              key={despesa.id}
-              title={despesa.title}
-              dueDate={despesa.dueDate}
-              paymentMethod={despesa.paymentMethod}
-              value={despesa.value}
-            />
-          ))}
+// ============================================================================
+// COMPONENTE: Toast de Confirmação
+// ============================================================================
+
+interface ToastProps {
+  message: string
+  isVisible: boolean
+}
+
+function Toast({ message, isVisible }: ToastProps) {
+  return (
+    <div
+      className={`
+        fixed bottom-6 left-1/2 transform -translate-x-1/2
+        px-6 py-3
+        bg-[#080B12]
+        text-white
+        text-[14px] font-medium
+        rounded-full
+        shadow-lg
+        transition-all duration-300 ease-out
+        z-50
+        ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}
+      `}
+    >
+      {message}
+    </div>
+  )
+}
+
+// ============================================================================
+// COMPONENTE PRINCIPAL
+// ============================================================================
+
+export default function ProximasDespesas() {
+  const { 
+    getPendingBills, 
+    markBillAsPaid, 
+    creditCards, 
+    bankAccounts 
+  } = useFinance()
+
+  // Estado para controlar itens sendo removidos
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
+  
+  // Estado para toast de confirmação
+  const [showToast, setShowToast] = useState(false)
+
+  // Obtém bills pendentes ordenadas por vencimento
+  const pendingBills = getPendingBills()
+
+  // Handler de adicionar despesa
+  const handleAddBill = useCallback(() => {
+    // TODO: Abrir modal de criação de despesa/transação
+    console.log('Add bill clicked - Abrir modal de nova transação')
+  }, [])
+
+  // Handler de marcar como paga
+  const handleMarkAsPaid = useCallback((billId: string) => {
+    // Adiciona à lista de removendo para animação
+    setRemovingIds(prev => new Set(prev).add(billId))
+    
+    // Executa a remoção após animação
+    setTimeout(() => {
+      markBillAsPaid(billId)
+      setRemovingIds(prev => {
+        const next = new Set(prev)
+        next.delete(billId)
+        return next
+      })
+      
+      // Mostra toast de confirmação
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 2500)
+    }, 300)
+  }, [markBillAsPaid])
+
+  return (
+    <>
+      <div
+        className="
+          bg-background-primary
+          rounded-[20px]
+          border border-border-light
+          w-full
+          min-w-0
+        "
+      >
+        <div className="flex flex-col gap-[24px] p-[32px]">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-[8px] items-center">
+              <span className="text-text-primary">
+                <CreditCardIcon />
+              </span>
+              <h3 className="text-[20px] font-bold leading-[28px] text-text-primary">
+                Próximas despesas
+              </h3>
+            </div>
+            {/* Botão circular 40px com borda clara */}
+            <button
+              onClick={handleAddBill}
+              className="
+                w-10 h-10
+                flex items-center justify-center
+                rounded-full
+                border border-gray-200
+                bg-white
+                text-text-primary
+                hover:bg-gray-50
+                hover:border-gray-300
+                transition-all duration-200
+              "
+              aria-label="Adicionar despesa"
+              title="Adicionar nova transação"
+            >
+              <PlusIcon />
+            </button>
+          </div>
+
+          {/* Lista de despesas ou estado vazio */}
+          {pendingBills.length > 0 ? (
+            <div className="flex flex-col">
+              {pendingBills.map((bill) => (
+                <DespesaItemCard
+                  key={bill.id}
+                  bill={bill}
+                  paymentMethod={getPaymentMethodName(bill.accountId, creditCards, bankAccounts)}
+                  onMarkAsPaid={() => handleMarkAsPaid(bill.id)}
+                  isRemoving={removingIds.has(bill.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState />
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Toast de confirmação */}
+      <Toast message="Despesa marcada como paga!" isVisible={showToast} />
+    </>
   )
 }

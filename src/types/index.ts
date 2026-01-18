@@ -124,3 +124,32 @@ export function isCreditCard(account: Account): account is CreditCard {
 export function isBankAccount(account: Account): account is BankAccount {
   return 'balance' in account && !isCreditCard(account);
 }
+
+/**
+ * Tipo de conta/bill: fixa (recorrente mensal) ou cartão (fatura)
+ */
+export type BillType = 'fixed' | 'card';
+
+/**
+ * Status da conta/bill
+ */
+export type BillStatus = 'pending' | 'paid';
+
+/**
+ * Entidade: Bill (Conta a pagar)
+ * Representa despesas pendentes que aparecem no widget "Próximas Despesas"
+ */
+export interface Bill {
+  id: string;
+  description: string;
+  value: number;
+  dueDate: Date;
+  type: BillType;
+  status: BillStatus;
+  accountId: string | null; // ID da conta/cartão de pagamento
+  isRecurring: boolean; // Se é conta recorrente mensal
+  installments?: number; // Número de parcelas (se parcelado)
+  currentInstallment?: number; // Parcela atual
+  createdAt: Date;
+  updatedAt: Date;
+}

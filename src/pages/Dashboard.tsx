@@ -20,6 +20,7 @@ import {
   FluxoFinanceiro,
   ProximasDespesas,
   ExtratoDetalhado,
+  ObjetivosSection,
 } from '@/components/dashboard'
 import { useFinance } from '@/contexts/FinanceContext'
 import { formatCurrency } from '@/utils/formatters'
@@ -113,6 +114,9 @@ export default function Dashboard() {
             <ProximasDespesas />
           </div>
         </div>
+
+        {/* Seção de Objetivos */}
+        <ObjetivosSection />
 
         {/* Extrato Detalhado */}
         <ExtratoDetalhado />

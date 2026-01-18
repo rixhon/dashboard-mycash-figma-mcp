@@ -19,6 +19,7 @@ import {
   CreditCard,
   BankAccount,
   FamilyMember,
+  Bill,
 } from '@/types'
 
 // ============================================================================
@@ -79,6 +80,7 @@ interface FinanceContextType {
   creditCards: CreditCard[]
   bankAccounts: BankAccount[]
   familyMembers: FamilyMember[]
+  bills: Bill[]
 
   // ===== FILTROS =====
   filters: FiltersState
@@ -112,6 +114,13 @@ interface FinanceContextType {
   addFamilyMember: (member: Omit<FamilyMember, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateFamilyMember: (id: string, updates: Partial<FamilyMember>) => void
   deleteFamilyMember: (id: string) => void
+
+  // ===== CRUD: BILLS =====
+  addBill: (bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => void
+  updateBill: (id: string, updates: Partial<Bill>) => void
+  deleteBill: (id: string) => void
+  markBillAsPaid: (id: string) => void
+  getPendingBills: () => Bill[]
 
   // ===== CÁLCULOS DERIVADOS =====
   getFilteredTransactions: () => Transaction[]
@@ -257,6 +266,117 @@ const initialBankAccounts: BankAccount[] = [
     updatedAt: new Date('2024-01-01'),
   },
 ]
+
+/**
+ * Contas/Bills pendentes (próximas despesas)
+ * Ordenadas por data de vencimento
+ */
+const generateInitialBills = (): Bill[] => {
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+
+  return [
+    {
+      id: 'bill-1',
+      description: 'Conta de Luz',
+      value: 154,
+      dueDate: new Date(currentYear, currentMonth, 21),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'card-1',
+      isRecurring: true,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-2',
+      description: 'Conta de Água',
+      value: 98,
+      dueDate: new Date(currentYear, currentMonth, 25),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'card-1',
+      isRecurring: true,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-3',
+      description: 'Internet Vivo Fibra',
+      value: 120,
+      dueDate: new Date(currentYear, currentMonth, 15),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'account-1',
+      isRecurring: true,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-4',
+      description: 'Netflix',
+      value: 55,
+      dueDate: new Date(currentYear, currentMonth, 10),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'card-1',
+      isRecurring: true,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-5',
+      description: 'Spotify Família',
+      value: 34,
+      dueDate: new Date(currentYear, currentMonth, 10),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'card-1',
+      isRecurring: true,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-6',
+      description: 'Fatura Nubank',
+      value: 2340,
+      dueDate: new Date(currentYear, currentMonth, 17),
+      type: 'card',
+      status: 'pending',
+      accountId: 'card-1',
+      isRecurring: false,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-7',
+      description: 'Fatura Inter',
+      value: 1850,
+      dueDate: new Date(currentYear, currentMonth, 22),
+      type: 'card',
+      status: 'pending',
+      accountId: 'card-2',
+      isRecurring: false,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+    {
+      id: 'bill-8',
+      description: 'Roupas - Shopping',
+      value: 150,
+      dueDate: new Date(currentYear, currentMonth, 22),
+      type: 'fixed',
+      status: 'pending',
+      accountId: 'card-2',
+      isRecurring: false,
+      installments: 3,
+      currentInstallment: 2,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+  ]
+}
 
 /**
  * Objetivos/Metas variados
@@ -938,6 +1058,7 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
   const [creditCards, setCreditCards] = useState<CreditCard[]>(initialCreditCards)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(initialBankAccounts)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(initialFamilyMembers)
+  const [bills, setBills] = useState<Bill[]>(generateInitialBills)
 
   // ===== ESTADO DOS FILTROS =====
   const [filters, setFilters] = useState<FiltersState>(() => {
@@ -1105,6 +1226,92 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
   const deleteFamilyMember = useCallback((id: string) => {
     setFamilyMembers(prev => prev.filter(m => m.id !== id))
   }, [])
+
+  // ===== CRUD: BILLS =====
+  const addBill = useCallback((bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const now = new Date()
+    const newBill: Bill = {
+      ...bill,
+      id: generateId(),
+      createdAt: now,
+      updatedAt: now,
+    }
+    setBills(prev => [...prev, newBill])
+  }, [])
+
+  const updateBill = useCallback((id: string, updates: Partial<Bill>) => {
+    setBills(prev =>
+      prev.map(b =>
+        b.id === id ? { ...b, ...updates, updatedAt: new Date() } : b
+      )
+    )
+  }, [])
+
+  const deleteBill = useCallback((id: string) => {
+    setBills(prev => prev.filter(b => b.id !== id))
+  }, [])
+
+  /**
+   * Marca uma conta como paga
+   * - Para contas recorrentes: agenda próxima ocorrência para o mês seguinte
+   * - Para contas parceladas: atualiza para próxima parcela
+   * - Para contas únicas: remove da lista
+   */
+  const markBillAsPaid = useCallback((id: string) => {
+    setBills(prev => {
+      const bill = prev.find(b => b.id === id)
+      if (!bill) return prev
+
+      // Se é recorrente, cria nova bill para o próximo mês
+      if (bill.isRecurring) {
+        const nextDueDate = new Date(bill.dueDate)
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+        
+        const newBill: Bill = {
+          ...bill,
+          id: generateId(),
+          dueDate: nextDueDate,
+          status: 'pending',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+        
+        // Remove a atual e adiciona a próxima
+        return [...prev.filter(b => b.id !== id), newBill]
+      }
+
+      // Se é parcelada e ainda tem parcelas
+      if (bill.installments && bill.currentInstallment && bill.currentInstallment < bill.installments) {
+        const nextDueDate = new Date(bill.dueDate)
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+        
+        const newBill: Bill = {
+          ...bill,
+          id: generateId(),
+          dueDate: nextDueDate,
+          currentInstallment: bill.currentInstallment + 1,
+          status: 'pending',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+        
+        // Remove a atual e adiciona a próxima parcela
+        return [...prev.filter(b => b.id !== id), newBill]
+      }
+
+      // Conta única ou última parcela: apenas remove
+      return prev.filter(b => b.id !== id)
+    })
+  }, [])
+
+  /**
+   * Retorna bills pendentes ordenadas por data de vencimento (mais próximas primeiro)
+   */
+  const getPendingBills = useCallback((): Bill[] => {
+    return bills
+      .filter(b => b.status === 'pending')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+  }, [bills])
 
   // ===== HELPERS =====
   const getMemberById = useCallback((id: string): FamilyMember | undefined => {
@@ -1307,6 +1514,7 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
     creditCards,
     bankAccounts,
     familyMembers,
+    bills,
 
     // Filtros
     filters,
@@ -1341,6 +1549,13 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
     updateFamilyMember,
     deleteFamilyMember,
 
+    // CRUD: Bills
+    addBill,
+    updateBill,
+    deleteBill,
+    markBillAsPaid,
+    getPendingBills,
+
     // Cálculos derivados
     getFilteredTransactions,
     calculateTotalBalance,
@@ -1362,6 +1577,7 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
     creditCards,
     bankAccounts,
     familyMembers,
+    bills,
     filters,
     setSelectedMember,
     setDateRange,
@@ -1383,6 +1599,11 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
     addFamilyMember,
     updateFamilyMember,
     deleteFamilyMember,
+    addBill,
+    updateBill,
+    deleteBill,
+    markBillAsPaid,
+    getPendingBills,
     getFilteredTransactions,
     calculateTotalBalance,
     calculateIncomeForPeriod,
