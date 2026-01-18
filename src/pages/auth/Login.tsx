@@ -20,7 +20,15 @@ export default function Login() {
     setError('')
     setLoading(true)
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:23',message:'signIn called',data:{email},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
     const { error } = await signIn(email, password)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:28',message:'signIn result',data:{hasError:!!error,errorMsg:error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     
     if (error) {
       setError(error.message === 'Invalid login credentials' 
@@ -29,6 +37,10 @@ export default function Login() {
       setLoading(false)
       return
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:38',message:'navigating to /',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     
     navigate('/')
   }

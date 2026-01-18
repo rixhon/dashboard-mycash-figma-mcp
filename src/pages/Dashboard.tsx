@@ -12,6 +12,7 @@
  * - Respeitam filtros de período, membro e tipo de transação
  */
 
+import { Component, ErrorInfo, ReactNode } from 'react'
 import {
   Navbar,
   SummaryCard,
@@ -24,6 +25,50 @@ import {
 } from '@/components/dashboard'
 import { useFinance } from '@/contexts/FinanceContext'
 import { formatCurrency } from '@/utils/formatters'
+
+// ErrorBoundary para capturar erros de renderização
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:ErrorBoundary',message:'React error caught',data:{error:error.message,stack:error.stack?.substring(0,500),componentStack:errorInfo.componentStack?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'I'})}).catch(()=>{});
+    // #endregion
+    console.error('Dashboard Error:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full min-h-screen bg-background-secondary flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
+            <h2 className="text-xl font-semibold text-red-600 mb-4">Erro ao carregar Dashboard</h2>
+            <p className="text-text-secondary mb-4">{this.state.error?.message}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-accent-primary text-white rounded-lg"
+            >
+              Recarregar página
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // Ícone de cifrão ($) para Saldo total - conforme Figma
 const DollarIcon = ({ color }: { color: string }) => (
@@ -47,12 +92,35 @@ const ArrowUpIcon = ({ color }: { color: string }) => (
 )
 
 export default function Dashboard() {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:49',message:'Dashboard render',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
+  // #endregion
+  
   // Dados do contexto global - respeitam todos os filtros ativos
+  const finance = useFinance()
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:55',message:'useFinance result',data:{hasFinance:!!finance,loading:finance?.loading,error:finance?.error,categoriesCount:finance?.categories?.length,accountsCount:finance?.accounts?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H'})}).catch(()=>{});
+  // #endregion
+  
   const {
     calculateTotalBalance,
     calculateIncomeForPeriod,
     calculateExpensesForPeriod,
-  } = useFinance()
+    loading,
+  } = finance
+
+  // Mostrar loading enquanto carrega dados
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen bg-background-secondary flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-accent-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-secondary">Carregando dados...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Valores calculados dinamicamente
   const totalBalance = calculateTotalBalance()
@@ -60,6 +128,7 @@ export default function Dashboard() {
   const totalExpenses = calculateExpensesForPeriod()
 
   return (
+    <ErrorBoundary>
     <div className="w-full min-h-screen bg-background-secondary overflow-x-hidden">
       {/* Container principal com padding e gap de 32px conforme Figma */}
       <div className="px-[16px] py-[12px] md:px-[24px] lg:px-[32px] lg:py-[12px] flex flex-col gap-[32px] w-full">
@@ -124,5 +193,6 @@ export default function Dashboard() {
         <ExtratoDetalhado />
       </div>
     </div>
+    </ErrorBoundary>
   )
 }

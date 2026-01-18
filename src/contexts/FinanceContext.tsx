@@ -365,6 +365,9 @@ interface FinanceProviderProps {
 
 export function FinanceProvider({ children }: FinanceProviderProps) {
   const { user } = useAuth()
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:367',message:'FinanceProvider render',data:{hasUser:!!user,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   
   // Estado de carregamento
   const [loading, setLoading] = useState(true)
@@ -422,7 +425,13 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
   // ============================================================================
   
   const loadData = useCallback(async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:424',message:'loadData called',data:{hasUser:!!user,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (!user) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:428',message:'loadData early return - no user',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setLoading(false)
       return
     }
@@ -445,6 +454,10 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
         supabase.from('recurring_transactions').select('*').eq('is_active', true).order('description'),
       ])
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:450',message:'Supabase queries completed',data:{membersCount:membersData?.length,membersError:membersError?.message,categoriesCount:categoriesData?.length,categoriesError:categoriesError?.message,accountsCount:accountsData?.length,accountsError:accountsError?.message,transactionsCount:transactionsData?.length,transactionsError:transactionsError?.message,recurringCount:recurringData?.length,recurringError:recurringError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
+      // #endregion
+      
       if (membersError) throw membersError
       if (categoriesError) throw categoriesError
       if (accountsError) throw accountsError
@@ -456,7 +469,14 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
       setAccounts((accountsData || []).map(normalizeAccount))
       setTransactions((transactionsData || []).map(normalizeTransaction))
       setRecurringTransactions(recurringData || [])
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:468',message:'Data loaded successfully',data:{familyMembers:membersData?.length,categories:categoriesData?.length,accounts:accountsData?.length,transactions:transactionsData?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:472',message:'loadData error',data:{error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       console.error('Error loading data:', err)
       setError('Erro ao carregar dados. Tente novamente.')
     } finally {
@@ -465,6 +485,9 @@ export function FinanceProvider({ children }: FinanceProviderProps) {
   }, [user])
   
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/015b0f48-f030-4861-8cd4-aa766eca13cd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FinanceContext.tsx:487',message:'useEffect calling loadData',data:{hasUser:!!user,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
     loadData()
   }, [loadData])
   

@@ -751,15 +751,15 @@ export default function Navbar() {
             >
               <CalendarIcon />
               <span className="text-[14px] font-normal leading-[20px] tracking-[0.3px]">
-                {formatDateRange(filters.dateRange.startDate, filters.dateRange.endDate)}
+                {formatDateRange(filters.dateRange.start || filters.dateRange.startDate!, filters.dateRange.end || filters.dateRange.endDate!)}
               </span>
             </button>
 
             <DatePicker
               isOpen={isDatePickerOpen}
               onClose={() => setIsDatePickerOpen(false)}
-              startDate={filters.dateRange.startDate}
-              endDate={filters.dateRange.endDate}
+              startDate={filters.dateRange.start || filters.dateRange.startDate!}
+              endDate={filters.dateRange.end || filters.dateRange.endDate!}
               onDateChange={handleDateRangeChange}
               isMobile={isMobile}
             />

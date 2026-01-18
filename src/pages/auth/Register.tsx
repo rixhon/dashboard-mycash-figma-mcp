@@ -3,11 +3,12 @@
  */
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Register() {
-  const { signUp } = useAuth()
+  const navigate = useNavigate()
+  const { signUp, signIn } = useAuth()
   
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -51,7 +52,20 @@ export default function Register() {
       return
     }
     
-    setSuccess(true)
+    // Aguardar um momento para o trigger confirmar o email
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // Tentar fazer login automático
+    const { error: signInError } = await signIn(email, password)
+    
+    if (signInError) {
+      // Se falhar o login automático, mostrar mensagem de sucesso
+      setSuccess(true)
+      return
+    }
+    
+    // Login bem sucedido, redirecionar para o dashboard
+    navigate('/')
   }
   
   if (success) {

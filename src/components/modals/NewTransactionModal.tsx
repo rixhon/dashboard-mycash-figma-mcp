@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { useFinance, CATEGORIES } from '@/contexts/FinanceContext'
+import { useFinance } from '@/contexts/FinanceContext'
 import Modal, { 
   Button, 
   Input, 
@@ -75,6 +75,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     familyMembers,
     bankAccounts,
     creditCards,
+    categories,
     addTransaction,
   } = useFinance()
 
@@ -92,13 +93,9 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     return now.toISOString().split('T')[0]
   })
   
-  // Estado para nova categoria
+  // Estado para nova categoria (TODO: integrar com banco de dados)
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
-  const [customCategories, setCustomCategories] = useState<{ income: string[]; expense: string[] }>({
-    income: [],
-    expense: [],
-  })
 
   // Estado de erros
   const [errors, setErrors] = useState<FormErrors>({})
@@ -130,12 +127,15 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
   // Mostra parcelamento apenas se: tipo = despesa E conta = cartão
   const showInstallments = type === 'expense' && isCardSelected
 
-  // Categorias disponíveis baseadas no tipo
+  // Categorias disponíveis baseadas no tipo (do banco de dados)
   const availableCategories = useMemo(() => {
-    const baseCategories = type === 'income' ? CATEGORIES.income : CATEGORIES.expense
-    const custom = type === 'income' ? customCategories.income : customCategories.expense
-    return [...baseCategories, ...custom]
-  }, [type, customCategories])
+    // Filtra categorias pelo tipo (INCOME ou EXPENSE)
+    const typeFilter = type.toUpperCase()
+    return categories.filter(cat => {
+      const catType = (cat.type || '').toUpperCase()
+      return catType === typeFilter
+    })
+  }, [type, categories])
 
   // Opções de membros
   const memberOptions = useMemo(() => [
@@ -167,18 +167,15 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     return options
   }, [])
 
-  // Handler para adicionar nova categoria
+  // Handler para adicionar nova categoria (TODO: integrar com banco de dados)
   const handleAddCategory = useCallback(() => {
     if (newCategoryName.trim().length >= 2) {
-      setCustomCategories(prev => ({
-        ...prev,
-        [type]: [...prev[type], newCategoryName.trim()]
-      }))
-      setCategory(newCategoryName.trim())
+      // Por enquanto, apenas fecha o formulário
+      // Futuramente: chamar addCategory do contexto
       setNewCategoryName('')
       setShowNewCategory(false)
     }
-  }, [newCategoryName, type])
+  }, [newCategoryName])
 
   // Handler para mudança de tipo
   const handleTypeChange = useCallback((newType: string) => {
@@ -232,21 +229,20 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
   }, [value, description, category, accountId])
 
   // Submit
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!validate()) return
 
     const numValue = parseFloat(value.replace(/[^\d,]/g, '').replace(',', '.'))
     const numInstallments = parseInt(installments)
 
-    addTransaction({
+    const result = await addTransaction({
       type: type.toUpperCase() as 'INCOME' | 'EXPENSE',
       amount: numValue,
       value: numValue,
       description: description.trim(),
       category_id: category,
       categoryId: category,
-      category,
-      date: date, // Mantém como string ISO
+      date: date,
       account_id: accountId,
       accountId,
       member_id: memberId || null,
@@ -258,15 +254,19 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
       status: 'COMPLETED',
       is_recurring: isRecurring,
       isRecurring,
-      isPaid: false,
     })
 
-    // Mostra toast
-    setShowToast(true)
-    setTimeout(() => {
-      setShowToast(false)
-      onClose()
-    }, 1500)
+    if (result) {
+      // Mostra toast de sucesso
+      setShowToast(true)
+      setTimeout(() => {
+        setShowToast(false)
+        onClose()
+      }, 1500)
+    } else {
+      // Erro ao salvar - poderia mostrar um toast de erro
+      console.error('Erro ao salvar transação')
+    }
   }, [validate, value, description, category, date, accountId, memberId, installments, isRecurring, type, addTransaction, onClose])
 
   // Formata valor como moeda
@@ -429,7 +429,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                     label=""
                     value={category}
                     onChange={setCategory}
-                    options={availableCategories.map(c => ({ value: typeof c === 'string' ? c : c.id, label: typeof c === 'string' ? c : c.name }))}
+                    options={availableCategories.map(c => ({ value: c.id, label: c.name }))}
                     placeholder="Selecione a categoria"
                     error={errors.category}
                   />
