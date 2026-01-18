@@ -239,16 +239,24 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     const numInstallments = parseInt(installments)
 
     addTransaction({
-      type,
+      type: type.toUpperCase() as 'INCOME' | 'EXPENSE',
+      amount: numValue,
       value: numValue,
       description: description.trim(),
+      category_id: category,
+      categoryId: category,
       category,
-      date: new Date(date),
+      date: date, // Mantém como string ISO
+      account_id: accountId,
       accountId,
+      member_id: memberId || null,
       memberId: memberId || null,
+      total_installments: numInstallments,
       installments: numInstallments,
-      currentInstallment: 1,
-      status: 'completed',
+      installment_number: 1,
+      installmentNumber: 1,
+      status: 'COMPLETED',
+      is_recurring: isRecurring,
       isRecurring,
       isPaid: false,
     })
@@ -421,7 +429,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                     label=""
                     value={category}
                     onChange={setCategory}
-                    options={availableCategories.map(c => ({ value: c, label: c }))}
+                    options={availableCategories.map(c => ({ value: typeof c === 'string' ? c : c.id, label: typeof c === 'string' ? c : c.name }))}
                     placeholder="Selecione a categoria"
                     error={errors.category}
                   />

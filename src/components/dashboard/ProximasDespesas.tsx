@@ -72,7 +72,12 @@ function formatCurrency(value: number): string {
 /**
  * Formata data de vencimento
  */
-function formatDueDate(date: Date): string {
+function formatDueDate(date: Date | string | number | undefined): string {
+  if (!date) return 'Sem data'
+  // Se for um número (dueDay), formata como dia do mês
+  if (typeof date === 'number') {
+    return `Vence dia ${date.toString().padStart(2, '0')}`
+  }
   const d = new Date(date)
   const day = d.getDate().toString().padStart(2, '0')
   const month = (d.getMonth() + 1).toString().padStart(2, '0')

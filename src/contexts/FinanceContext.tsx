@@ -1,1656 +1,1144 @@
 /**
- * FinanceContext - Gerenciamento de Estado Global
+ * FinanceContext - Contexto de Finanças
  * 
- * Este contexto é o coração do sistema mycash+, responsável por:
- * - Armazenar todas as entidades principais (transactions, goals, creditCards, bankAccounts, familyMembers)
- * - Gerenciar filtros globais (membro selecionado, período, tipo de transação, busca)
- * - Fornecer funções CRUD para todas as entidades
- * - Calcular métricas derivadas (saldo total, receitas, despesas, percentuais)
- * 
- * ⚠️ IMPORTANTE: Este sistema NÃO usa localStorage/sessionStorage.
- * Todo estado é mantido em memória via React state.
- * Dados são perdidos ao recarregar a página (até integração com Supabase).
+ * Gerencia todos os dados financeiros do usuário usando Supabase.
+ * Inclui transações, contas, cartões, membros da família e categorias.
  */
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react'
-import {
-  Transaction,
-  Goal,
-  CreditCard,
-  BankAccount,
-  FamilyMember,
-  Bill,
-} from '@/types'
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from './AuthContext'
 
 // ============================================================================
-// TIPOS DO CONTEXTO
+// TIPOS EXPORTADOS
 // ============================================================================
 
-/**
- * Filtro de período (datas)
- */
-interface DateRange {
-  startDate: Date
-  endDate: Date
+export interface DateRange {
+  start: Date
+  end: Date
+  startDate?: Date
+  endDate?: Date
 }
 
-/**
- * Tipo de filtro de transação
- */
-type TransactionFilterType = 'all' | 'income' | 'expense'
+// Função helper para criar DateRange com aliases
+export function createDateRange(start: Date, end: Date): DateRange {
+  return {
+    start,
+    end,
+    startDate: start,
+    endDate: end,
+  }
+}
 
-/**
- * Estado dos filtros globais
- */
-interface FiltersState {
-  selectedMember: string | null
+export type TransactionFilterType = 'all' | 'income' | 'expense'
+
+export interface FiltersState {
   dateRange: DateRange
+  selectedMember: string | null
   transactionType: TransactionFilterType
   searchText: string
 }
 
-/**
- * Despesa agrupada por categoria
- */
-interface ExpenseByCategory {
-  category: string
+export interface ExpenseByCategory {
+  categoryId: string
+  categoryName: string
+  categoryIcon: string
+  categoryColor: string
   total: number
-  percentage: number
   count: number
+  percentage: number
+  // Aliases para compatibilidade
+  category?: string
 }
 
-/**
- * Gasto agrupado por membro da família
- */
-interface ExpenseByMember {
-  memberId: string | null
+export interface ExpenseByMember {
+  memberId: string
   memberName: string
+  memberAvatar: string | null
   total: number
-  percentage: number
   count: number
+  percentage: number
 }
 
-/**
- * Interface completa do contexto
- */
+// Tipos de dados
+export interface FamilyMember {
+  id: string
+  user_id: string
+  name: string
+  role: string
+  avatarUrl: string | null
+  avatar_url: string | null
+  monthlyIncome: number
+  monthly_income: number
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Category {
+  id: string
+  user_id: string
+  name: string
+  icon: string
+  type: 'INCOME' | 'EXPENSE'
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Account {
+  id: string
+  user_id: string
+  type: 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD'
+  name: string
+  bank: string
+  last_digits: string | null
+  lastDigits: string | null
+  holder_id: string
+  holderId: string
+  balance: number
+  credit_limit: number | null
+  creditLimit: number | null
+  limit?: number | null // Alias para creditLimit
+  current_bill: number
+  currentBill: number
+  due_day: number | null
+  dueDay: number | null
+  closing_day: number | null
+  closingDay: number | null
+  theme: string | null
+  logo_url: string | null
+  logoUrl: string | null
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface Transaction {
+  id: string
+  user_id: string
+  type: 'INCOME' | 'EXPENSE' | 'income' | 'expense'
+  amount: number
+  value: number
+  description: string
+  date: string
+  category_id: string | null
+  categoryId: string | null
+  category: string | null
+  account_id: string | null
+  accountId: string | null
+  member_id: string | null
+  memberId: string | null
+  installment_number: number | null
+  installmentNumber: number | null
+  currentInstallment?: number | null
+  total_installments: number
+  installments: number
+  parent_transaction_id: string | null
+  is_recurring: boolean
+  isRecurring: boolean
+  recurring_transaction_id: string | null
+  status: 'PENDING' | 'COMPLETED' | 'pending' | 'completed'
+  isPaid?: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RecurringTransaction {
+  id: string
+  user_id: string
+  type: 'INCOME' | 'EXPENSE'
+  amount: number
+  description: string
+  category_id: string | null
+  account_id: string | null
+  member_id: string | null
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+  day_of_month: number | null
+  day_of_week: number | null
+  start_date: string
+  end_date: string | null
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Bill {
+  id: string
+  description: string
+  value: number
+  dueDay: number
+  dueDate?: Date | string
+  accountId: string | null
+  isRecurring: boolean
+  isPaid: boolean
+  installments?: number
+  currentInstallment?: number
+  type?: 'fixed' | 'card'
+  status?: 'pending' | 'paid'
+}
+
+export interface Goal {
+  id: string
+  name: string
+  title?: string
+  description: string
+  imageUrl: string
+  targetAmount: number
+  currentAmount: number
+  category: string
+  deadline: string | Date | null
+  memberId?: string | null
+  isActive: boolean
+  isCompleted?: boolean
+}
+
+// Categorias padrão
+export const CATEGORIES = {
+  income: [
+    { id: 'salary', name: 'Salário', icon: '💵', color: '#15BE78' },
+    { id: 'freelance', name: 'Freelance', icon: '💻', color: '#3247FF' },
+    { id: 'investments', name: 'Investimentos', icon: '📈', color: '#8B5CF6' },
+    { id: 'gift', name: 'Presente', icon: '🎁', color: '#EC4899' },
+    { id: 'other-income', name: 'Outros', icon: '💰', color: '#6B7280' },
+  ],
+  expense: [
+    { id: 'food', name: 'Alimentação', icon: '🍔', color: '#EF4444' },
+    { id: 'market', name: 'Mercado', icon: '🛒', color: '#F97316' },
+    { id: 'transport', name: 'Transporte', icon: '🚗', color: '#F59E0B' },
+    { id: 'housing', name: 'Moradia', icon: '🏠', color: '#84CC16' },
+    { id: 'health', name: 'Saúde', icon: '🏥', color: '#22C55E' },
+    { id: 'education', name: 'Educação', icon: '📚', color: '#14B8A6' },
+    { id: 'leisure', name: 'Lazer', icon: '🎮', color: '#06B6D4' },
+    { id: 'clothing', name: 'Vestuário', icon: '👕', color: '#3B82F6' },
+    { id: 'subscriptions', name: 'Assinaturas', icon: '📱', color: '#6366F1' },
+    { id: 'gym', name: 'Academia', icon: '🏋️', color: '#8B5CF6' },
+    { id: 'pets', name: 'Pets', icon: '🐶', color: '#A855F7' },
+    { id: 'maintenance', name: 'Manutenção', icon: '🔧', color: '#D946EF' },
+    { id: 'travel', name: 'Viagem', icon: '✈️', color: '#EC4899' },
+    { id: 'other-expense', name: 'Outros', icon: '💸', color: '#6B7280' },
+  ],
+}
+
+// ============================================================================
+// INTERFACE DO CONTEXTO
+// ============================================================================
+
 interface FinanceContextType {
-  // ===== ESTADO PRINCIPAL =====
-  transactions: Transaction[]
-  goals: Goal[]
-  creditCards: CreditCard[]
-  bankAccounts: BankAccount[]
+  // Estado
+  loading: boolean
+  error: string | null
+  
+  // Dados
   familyMembers: FamilyMember[]
+  categories: Category[]
+  accounts: Account[]
+  transactions: Transaction[]
+  recurringTransactions: RecurringTransaction[]
+  creditCards: Account[]
+  bankAccounts: Account[]
+  goals: Goal[]
   bills: Bill[]
-
-  // ===== FILTROS =====
+  
+  // Filtros
   filters: FiltersState
-  setSelectedMember: (memberId: string | null) => void
-  setDateRange: (range: DateRange) => void
-  setTransactionType: (type: TransactionFilterType) => void
+  setFilters: (filters: Partial<FiltersState>) => void
   setSearchText: (text: string) => void
-  resetFilters: () => void
-
-  // ===== CRUD: TRANSACTIONS =====
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateTransaction: (id: string, updates: Partial<Transaction>) => void
-  deleteTransaction: (id: string) => void
-
-  // ===== CRUD: GOALS =====
-  addGoal: (goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateGoal: (id: string, updates: Partial<Goal>) => void
-  deleteGoal: (id: string) => void
-
-  // ===== CRUD: CREDIT CARDS =====
-  addCreditCard: (card: Omit<CreditCard, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateCreditCard: (id: string, updates: Partial<CreditCard>) => void
-  deleteCreditCard: (id: string) => void
-
-  // ===== CRUD: BANK ACCOUNTS =====
-  addBankAccount: (account: Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateBankAccount: (id: string, updates: Partial<BankAccount>) => void
-  deleteBankAccount: (id: string) => void
-
-  // ===== CRUD: FAMILY MEMBERS =====
-  addFamilyMember: (member: Omit<FamilyMember, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateFamilyMember: (id: string, updates: Partial<FamilyMember>) => void
-  deleteFamilyMember: (id: string) => void
-
-  // ===== CRUD: BILLS =====
-  addBill: (bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => void
-  updateBill: (id: string, updates: Partial<Bill>) => void
-  deleteBill: (id: string) => void
-  markBillAsPaid: (id: string) => void
-  getPendingBills: () => Bill[]
-
-  // ===== CÁLCULOS DERIVADOS =====
-  getFilteredTransactions: () => Transaction[]
+  setTransactionType: (type: TransactionFilterType) => void
+  setSelectedMember: (memberId: string | null) => void
+  setDateRange: (range: DateRange | { startDate: Date; endDate: Date }) => void
+  
+  // Cálculos
+  totalBalance: number
+  totalIncome: number
+  totalExpenses: number
+  savingsRate: number
+  expensesByCategory: ExpenseByCategory[]
   calculateTotalBalance: () => number
   calculateIncomeForPeriod: () => number
   calculateExpensesForPeriod: () => number
   calculateExpensesByCategory: () => ExpenseByCategory[]
-  calculateExpensesByMember: () => ExpenseByMember[]
-  calculateCategoryPercentage: (category: string) => number
-  calculateSavingsRate: () => number
-
-  // ===== HELPERS =====
-  getMemberById: (id: string) => FamilyMember | undefined
-  getAccountById: (id: string) => BankAccount | CreditCard | undefined
-  getCardById: (id: string) => CreditCard | undefined
+  calculateCategoryPercentage: (categoryTotal: number) => number
+  
+  // CRUD - Family Members
+  addFamilyMember: (member: Partial<FamilyMember>) => Promise<FamilyMember | null>
+  updateFamilyMember: (id: string, data: Partial<FamilyMember>) => Promise<boolean>
+  deleteFamilyMember: (id: string) => Promise<boolean>
+  
+  // CRUD - Categories
+  addCategory: (category: Partial<Category>) => Promise<Category | null>
+  updateCategory: (id: string, data: Partial<Category>) => Promise<boolean>
+  deleteCategory: (id: string) => Promise<boolean>
+  
+  // CRUD - Accounts
+  addAccount: (account: Partial<Account>) => Promise<Account | null>
+  updateAccount: (id: string, data: Partial<Account>) => Promise<boolean>
+  deleteAccount: (id: string) => Promise<boolean>
+  addBankAccount: (account: Partial<Account>) => Promise<Account | null>
+  addCreditCard: (card: Partial<Account>) => Promise<Account | null>
+  
+  // CRUD - Transactions
+  addTransaction: (transaction: Partial<Transaction>) => Promise<Transaction | null>
+  updateTransaction: (id: string, data: Partial<Transaction>) => Promise<boolean>
+  deleteTransaction: (id: string) => Promise<boolean>
+  
+  // CRUD - Recurring Transactions
+  addRecurringTransaction: (recurring: Partial<RecurringTransaction>) => Promise<RecurringTransaction | null>
+  updateRecurringTransaction: (id: string, data: Partial<RecurringTransaction>) => Promise<boolean>
+  deleteRecurringTransaction: (id: string) => Promise<boolean>
+  
+  // CRUD - Bills
+  addBill: (bill: Partial<Bill>) => Promise<Bill | null>
+  getPendingBills: () => Bill[]
+  markBillAsPaid: (id: string) => Promise<boolean>
+  
+  // Helpers
+  getFilteredTransactions: () => Transaction[]
+  getTransactionsByAccount: (accountId: string) => Transaction[]
   getTransactionsByCard: (cardId: string) => Transaction[]
+  getCreditCards: () => Account[]
+  getBankAccounts: () => Account[]
+  refreshData: () => Promise<void>
 }
 
 // ============================================================================
-// DADOS MOCK INICIAIS
-// ============================================================================
-
-/**
- * Gera um ID único simples
- */
-const generateId = (): string => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-}
-
-/**
- * Membros da família brasileira
- */
-const initialFamilyMembers: FamilyMember[] = [
-  {
-    id: 'member-1',
-    name: 'Lucas Martins',
-    role: 'Pai',
-    email: 'lucas.martins@email.com',
-    monthlyIncome: 12000,
-    avatarUrl: undefined,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'member-2',
-    name: 'Ana Martins',
-    role: 'Mãe',
-    email: 'ana.martins@email.com',
-    monthlyIncome: 8000,
-    avatarUrl: undefined,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'member-3',
-    name: 'Pedro Martins',
-    role: 'Filho',
-    email: 'pedro.martins@email.com',
-    monthlyIncome: 2500,
-    avatarUrl: undefined,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-]
-
-/**
- * Cartões de crédito de bancos brasileiros conhecidos
- */
-const initialCreditCards: CreditCard[] = [
-  {
-    id: 'card-1',
-    name: 'Nubank',
-    holderId: 'member-1',
-    closingDay: 10,
-    dueDay: 17,
-    limit: 15000,
-    currentBill: 2340,
-    theme: 'black',
-    lastDigits: '5897',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'card-2',
-    name: 'Inter',
-    holderId: 'member-2',
-    closingDay: 15,
-    dueDay: 22,
-    limit: 10000,
-    currentBill: 1850,
-    theme: 'white',
-    lastDigits: '4521',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'card-3',
-    name: 'Picpay',
-    holderId: 'member-3',
-    closingDay: 5,
-    dueDay: 12,
-    limit: 5000,
-    currentBill: 890,
-    theme: 'lime',
-    lastDigits: '7823',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-]
-
-/**
- * Contas bancárias
- */
-const initialBankAccounts: BankAccount[] = [
-  {
-    id: 'account-1',
-    name: 'Nubank Conta',
-    holderId: 'member-1',
-    balance: 8500,
-    bankName: 'Nubank',
-    accountNumber: '****5897',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'account-2',
-    name: 'Inter Conta',
-    holderId: 'member-2',
-    balance: 4200,
-    bankName: 'Inter',
-    accountNumber: '****4521',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'account-3',
-    name: 'Picpay Conta',
-    holderId: 'member-3',
-    balance: 1800,
-    bankName: 'Picpay',
-    accountNumber: '****7823',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-]
-
-/**
- * Contas/Bills pendentes (próximas despesas)
- * Ordenadas por data de vencimento
- */
-const generateInitialBills = (): Bill[] => {
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
-  return [
-    {
-      id: 'bill-1',
-      description: 'Conta de Luz',
-      value: 154,
-      dueDate: new Date(currentYear, currentMonth, 21),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'card-1',
-      isRecurring: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-2',
-      description: 'Conta de Água',
-      value: 98,
-      dueDate: new Date(currentYear, currentMonth, 25),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'card-1',
-      isRecurring: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-3',
-      description: 'Internet Vivo Fibra',
-      value: 120,
-      dueDate: new Date(currentYear, currentMonth, 15),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'account-1',
-      isRecurring: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-4',
-      description: 'Netflix',
-      value: 55,
-      dueDate: new Date(currentYear, currentMonth, 10),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'card-1',
-      isRecurring: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-5',
-      description: 'Spotify Família',
-      value: 34,
-      dueDate: new Date(currentYear, currentMonth, 10),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'card-1',
-      isRecurring: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-6',
-      description: 'Fatura Nubank',
-      value: 2340,
-      dueDate: new Date(currentYear, currentMonth, 17),
-      type: 'card',
-      status: 'pending',
-      accountId: 'card-1',
-      isRecurring: false,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-7',
-      description: 'Fatura Inter',
-      value: 1850,
-      dueDate: new Date(currentYear, currentMonth, 22),
-      type: 'card',
-      status: 'pending',
-      accountId: 'card-2',
-      isRecurring: false,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: 'bill-8',
-      description: 'Roupas - Shopping',
-      value: 150,
-      dueDate: new Date(currentYear, currentMonth, 22),
-      type: 'fixed',
-      status: 'pending',
-      accountId: 'card-2',
-      isRecurring: false,
-      installments: 3,
-      currentInstallment: 2,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-  ]
-}
-
-/**
- * Objetivos/Metas variados
- */
-const initialGoals: Goal[] = [
-  {
-    id: 'goal-1',
-    title: 'Reserva de Emergência',
-    description: '6 meses de despesas para segurança financeira',
-    targetAmount: 60000,
-    currentAmount: 25000,
-    deadline: new Date('2025-12-31'),
-    category: 'Segurança',
-    memberId: null,
-    isCompleted: false,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'goal-2',
-    title: 'Viagem para Europa',
-    description: 'Férias em família para Portugal e Espanha',
-    targetAmount: 35000,
-    currentAmount: 12000,
-    deadline: new Date('2025-07-01'),
-    category: 'Lazer',
-    memberId: null,
-    isCompleted: false,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'goal-3',
-    title: 'Notebook Novo',
-    description: 'MacBook Pro para trabalho',
-    targetAmount: 15000,
-    currentAmount: 8500,
-    deadline: new Date('2025-03-01'),
-    category: 'Tecnologia',
-    memberId: 'member-1',
-    isCompleted: false,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-  {
-    id: 'goal-4',
-    title: 'Curso de Inglês',
-    description: 'Curso intensivo de inglês para Pedro',
-    targetAmount: 5000,
-    currentAmount: 2000,
-    deadline: new Date('2025-06-01'),
-    category: 'Educação',
-    memberId: 'member-3',
-    isCompleted: false,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
-  },
-]
-
-/**
- * Categorias padrão brasileiras
- */
-const CATEGORIES = {
-  income: ['Salário', 'Freelance', 'Investimentos', 'Outros'],
-  expense: [
-    'Aluguel',
-    'Alimentação',
-    'Mercado',
-    'Transporte',
-    'Saúde',
-    'Educação',
-    'Lazer',
-    'Vestuário',
-    'Manutenção',
-    'Assinaturas',
-    'Academia',
-    'Pets',
-    'Outros',
-  ],
-}
-
-/**
- * Gera transações mock distribuídas nos últimos 3 meses
- */
-const generateInitialTransactions = (): Transaction[] => {
-  const transactions: Transaction[] = []
-  const now = new Date()
-  
-  // Helper para criar data no passado
-  const daysAgo = (days: number): Date => {
-    const date = new Date(now)
-    date.setDate(date.getDate() - days)
-    return date
-  }
-
-  // ===== RECEITAS =====
-  
-  // Salários mensais
-  transactions.push(
-    {
-      id: 'tx-1',
-      type: 'income',
-      value: 12000,
-      description: 'Salário - Lucas',
-      category: 'Salário',
-      date: daysAgo(5),
-      accountId: 'account-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-2',
-      type: 'income',
-      value: 8000,
-      description: 'Salário - Ana',
-      category: 'Salário',
-      date: daysAgo(5),
-      accountId: 'account-2',
-      memberId: 'member-2',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-3',
-      type: 'income',
-      value: 2500,
-      description: 'Estágio - Pedro',
-      category: 'Salário',
-      date: daysAgo(5),
-      accountId: 'account-3',
-      memberId: 'member-3',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-4',
-      type: 'income',
-      value: 3500,
-      description: 'Freelance - Projeto Web',
-      category: 'Freelance',
-      date: daysAgo(15),
-      accountId: 'account-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(15),
-      updatedAt: daysAgo(15),
-    },
-    {
-      id: 'tx-5',
-      type: 'income',
-      value: 850,
-      description: 'Dividendos - Ações',
-      category: 'Investimentos',
-      date: daysAgo(20),
-      accountId: 'account-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(20),
-      updatedAt: daysAgo(20),
-    },
-  )
-
-  // ===== DESPESAS =====
-  
-  // Aluguel
-  transactions.push({
-    id: 'tx-6',
-    type: 'expense',
-    value: 4000,
-    description: 'Aluguel do apartamento',
-    category: 'Aluguel',
-    date: daysAgo(3),
-    accountId: 'account-1',
-    memberId: null,
-    installments: 1,
-    currentInstallment: 1,
-    status: 'completed',
-    isRecurring: true,
-    isPaid: true,
-    createdAt: daysAgo(3),
-    updatedAt: daysAgo(3),
-  })
-
-  // Alimentação
-  transactions.push(
-    {
-      id: 'tx-7',
-      type: 'expense',
-      value: 450,
-      description: 'Restaurante Japonês',
-      category: 'Alimentação',
-      date: daysAgo(2),
-      accountId: 'card-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(2),
-      updatedAt: daysAgo(2),
-    },
-    {
-      id: 'tx-8',
-      type: 'expense',
-      value: 180,
-      description: 'iFood - Semana',
-      category: 'Alimentação',
-      date: daysAgo(7),
-      accountId: 'card-2',
-      memberId: 'member-2',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(7),
-      updatedAt: daysAgo(7),
-    },
-    {
-      id: 'tx-9',
-      type: 'expense',
-      value: 95,
-      description: 'Lanche na faculdade',
-      category: 'Alimentação',
-      date: daysAgo(4),
-      accountId: 'card-3',
-      memberId: 'member-3',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(4),
-      updatedAt: daysAgo(4),
-    },
-  )
-
-  // Mercado
-  transactions.push(
-    {
-      id: 'tx-10',
-      type: 'expense',
-      value: 850,
-      description: 'Compras do mês - Carrefour',
-      category: 'Mercado',
-      date: daysAgo(10),
-      accountId: 'card-1',
-      memberId: 'member-2',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(10),
-      updatedAt: daysAgo(10),
-    },
-    {
-      id: 'tx-11',
-      type: 'expense',
-      value: 320,
-      description: 'Feira da semana',
-      category: 'Mercado',
-      date: daysAgo(6),
-      accountId: 'account-2',
-      memberId: 'member-2',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(6),
-      updatedAt: daysAgo(6),
-    },
-  )
-
-  // Transporte
-  transactions.push(
-    {
-      id: 'tx-12',
-      type: 'expense',
-      value: 350,
-      description: 'Combustível - Gasolina',
-      category: 'Transporte',
-      date: daysAgo(8),
-      accountId: 'card-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(8),
-      updatedAt: daysAgo(8),
-    },
-    {
-      id: 'tx-13',
-      type: 'expense',
-      value: 180,
-      description: 'Uber - Mês',
-      category: 'Transporte',
-      date: daysAgo(12),
-      accountId: 'card-3',
-      memberId: 'member-3',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(12),
-      updatedAt: daysAgo(12),
-    },
-  )
-
-  // Saúde
-  transactions.push(
-    {
-      id: 'tx-14',
-      type: 'expense',
-      value: 890,
-      description: 'Plano de saúde familiar',
-      category: 'Saúde',
-      date: daysAgo(5),
-      accountId: 'account-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-15',
-      type: 'expense',
-      value: 250,
-      description: 'Farmácia',
-      category: 'Saúde',
-      date: daysAgo(14),
-      accountId: 'card-2',
-      memberId: 'member-2',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(14),
-      updatedAt: daysAgo(14),
-    },
-  )
-
-  // Educação
-  transactions.push(
-    {
-      id: 'tx-16',
-      type: 'expense',
-      value: 1200,
-      description: 'Mensalidade faculdade - Pedro',
-      category: 'Educação',
-      date: daysAgo(5),
-      accountId: 'account-1',
-      memberId: 'member-3',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-17',
-      type: 'expense',
-      value: 350,
-      description: 'Curso online - Udemy',
-      category: 'Educação',
-      date: daysAgo(25),
-      accountId: 'card-1',
-      memberId: 'member-1',
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(25),
-      updatedAt: daysAgo(25),
-    },
-  )
-
-  // Lazer
-  transactions.push(
-    {
-      id: 'tx-18',
-      type: 'expense',
-      value: 280,
-      description: 'Cinema + Pipoca',
-      category: 'Lazer',
-      date: daysAgo(9),
-      accountId: 'card-2',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(9),
-      updatedAt: daysAgo(9),
-    },
-    {
-      id: 'tx-19',
-      type: 'expense',
-      value: 750,
-      description: 'Passeio no parque aquático',
-      category: 'Lazer',
-      date: daysAgo(18),
-      accountId: 'card-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: false,
-      isPaid: true,
-      createdAt: daysAgo(18),
-      updatedAt: daysAgo(18),
-    },
-  )
-
-  // Assinaturas
-  transactions.push(
-    {
-      id: 'tx-20',
-      type: 'expense',
-      value: 55,
-      description: 'Netflix',
-      category: 'Assinaturas',
-      date: daysAgo(5),
-      accountId: 'card-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-21',
-      type: 'expense',
-      value: 34,
-      description: 'Spotify Família',
-      category: 'Assinaturas',
-      date: daysAgo(5),
-      accountId: 'card-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-    {
-      id: 'tx-22',
-      type: 'expense',
-      value: 22,
-      description: 'Amazon Prime',
-      category: 'Assinaturas',
-      date: daysAgo(5),
-      accountId: 'card-2',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-  )
-
-  // Academia
-  transactions.push({
-    id: 'tx-23',
-    type: 'expense',
-    value: 120,
-    description: 'Academia Smart Fit',
-    category: 'Academia',
-    date: daysAgo(5),
-    accountId: 'card-3',
-    memberId: 'member-3',
-    installments: 1,
-    currentInstallment: 1,
-    status: 'completed',
-    isRecurring: true,
-    isPaid: true,
-    createdAt: daysAgo(5),
-    updatedAt: daysAgo(5),
-  })
-
-  // Manutenção
-  transactions.push(
-    {
-      id: 'tx-24',
-      type: 'expense',
-      value: 150,
-      description: 'Conta de luz',
-      category: 'Manutenção',
-      date: daysAgo(3),
-      accountId: 'account-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(3),
-      updatedAt: daysAgo(3),
-    },
-    {
-      id: 'tx-25',
-      type: 'expense',
-      value: 100,
-      description: 'Conta de água',
-      category: 'Manutenção',
-      date: daysAgo(3),
-      accountId: 'account-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(3),
-      updatedAt: daysAgo(3),
-    },
-    {
-      id: 'tx-26',
-      type: 'expense',
-      value: 120,
-      description: 'Internet Vivo Fibra',
-      category: 'Manutenção',
-      date: daysAgo(5),
-      accountId: 'account-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'completed',
-      isRecurring: true,
-      isPaid: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(5),
-    },
-  )
-
-  // Vestuário
-  transactions.push({
-    id: 'tx-27',
-    type: 'expense',
-    value: 450,
-    description: 'Roupas - Shopping',
-    category: 'Vestuário',
-    date: daysAgo(22),
-    accountId: 'card-2',
-    memberId: 'member-2',
-    installments: 3,
-    currentInstallment: 1,
-    status: 'completed',
-    isRecurring: false,
-    isPaid: true,
-    createdAt: daysAgo(22),
-    updatedAt: daysAgo(22),
-  })
-
-  // Pets
-  transactions.push({
-    id: 'tx-28',
-    type: 'expense',
-    value: 280,
-    description: 'Ração e petiscos - Cachorro',
-    category: 'Pets',
-    date: daysAgo(11),
-    accountId: 'card-2',
-    memberId: null,
-    installments: 1,
-    currentInstallment: 1,
-    status: 'completed',
-    isRecurring: false,
-    isPaid: true,
-    createdAt: daysAgo(11),
-    updatedAt: daysAgo(11),
-  })
-
-  // Despesas pendentes (próximas)
-  transactions.push(
-    {
-      id: 'tx-29',
-      type: 'expense',
-      value: 154,
-      description: 'Conta de Luz - Próxima',
-      category: 'Manutenção',
-      date: new Date(now.getFullYear(), now.getMonth(), 21),
-      accountId: 'card-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'pending',
-      isRecurring: true,
-      isPaid: false,
-      createdAt: daysAgo(1),
-      updatedAt: daysAgo(1),
-    },
-    {
-      id: 'tx-30',
-      type: 'expense',
-      value: 98,
-      description: 'Conta de Água - Próxima',
-      category: 'Manutenção',
-      date: new Date(now.getFullYear(), now.getMonth(), 25),
-      accountId: 'card-1',
-      memberId: null,
-      installments: 1,
-      currentInstallment: 1,
-      status: 'pending',
-      isRecurring: true,
-      isPaid: false,
-      createdAt: daysAgo(1),
-      updatedAt: daysAgo(1),
-    },
-  )
-
-  return transactions
-}
-
-// ============================================================================
-// CONTEXTO E PROVIDER
+// CONTEXTO
 // ============================================================================
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined)
+
+// ============================================================================
+// HELPER: Normalizar dados do banco
+// ============================================================================
+
+function normalizeTransaction(t: any): Transaction {
+  return {
+    ...t,
+    value: Number(t.amount),
+    categoryId: t.category_id,
+    accountId: t.account_id,
+    memberId: t.member_id,
+    installmentNumber: t.installment_number,
+    installments: t.total_installments,
+    isRecurring: t.is_recurring,
+  }
+}
+
+function normalizeAccount(a: any): Account {
+  const creditLimit = a.credit_limit ? Number(a.credit_limit) : null
+  return {
+    ...a,
+    lastDigits: a.last_digits,
+    holderId: a.holder_id,
+    creditLimit,
+    limit: creditLimit, // Alias
+    currentBill: Number(a.current_bill || 0),
+    dueDay: a.due_day,
+    closingDay: a.closing_day,
+    logoUrl: a.logo_url,
+    balance: Number(a.balance || 0),
+  }
+}
+
+function normalizeFamilyMember(m: any): FamilyMember {
+  return {
+    ...m,
+    avatarUrl: m.avatar_url,
+    monthlyIncome: Number(m.monthly_income || 0),
+  }
+}
+
+// ============================================================================
+// PROVIDER
+// ============================================================================
 
 interface FinanceProviderProps {
   children: ReactNode
 }
 
-/**
- * Provider principal do sistema financeiro
- * Gerencia todo o estado global da aplicação
- */
 export function FinanceProvider({ children }: FinanceProviderProps) {
-  // ===== ESTADO PRINCIPAL =====
-  const [transactions, setTransactions] = useState<Transaction[]>(generateInitialTransactions)
-  const [goals, setGoals] = useState<Goal[]>(initialGoals)
-  const [creditCards, setCreditCards] = useState<CreditCard[]>(initialCreditCards)
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(initialBankAccounts)
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(initialFamilyMembers)
-  const [bills, setBills] = useState<Bill[]>(generateInitialBills)
-
-  // ===== ESTADO DOS FILTROS =====
-  const [filters, setFilters] = useState<FiltersState>(() => {
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    
-    return {
-      selectedMember: null,
-      dateRange: {
-        startDate: startOfMonth,
-        endDate: endOfMonth,
-      },
-      transactionType: 'all',
-      searchText: '',
-    }
+  const { user } = useAuth()
+  
+  // Estado de carregamento
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Dados
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([])
+  const [bills, setBills] = useState<Bill[]>([])
+  const [goals] = useState<Goal[]>([])
+  
+  // Filtros
+  const [filters, setFiltersState] = useState<FiltersState>({
+    dateRange: {
+      start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
+    },
+    selectedMember: null,
+    transactionType: 'all',
+    searchText: '',
   })
-
-  // ===== FUNÇÕES DE FILTRO =====
-  const setSelectedMember = useCallback((memberId: string | null) => {
-    setFilters(prev => ({ ...prev, selectedMember: memberId }))
+  
+  // Setters de filtros
+  const setFilters = useCallback((newFilters: Partial<FiltersState>) => {
+    setFiltersState(prev => ({ ...prev, ...newFilters }))
   }, [])
-
-  const setDateRange = useCallback((range: DateRange) => {
-    setFilters(prev => ({ ...prev, dateRange: range }))
-  }, [])
-
-  const setTransactionType = useCallback((type: TransactionFilterType) => {
-    setFilters(prev => ({ ...prev, transactionType: type }))
-  }, [])
-
+  
   const setSearchText = useCallback((text: string) => {
-    setFilters(prev => ({ ...prev, searchText: text }))
+    setFiltersState(prev => ({ ...prev, searchText: text }))
   }, [])
-
-  const resetFilters = useCallback(() => {
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  
+  const setTransactionType = useCallback((type: TransactionFilterType) => {
+    setFiltersState(prev => ({ ...prev, transactionType: type }))
+  }, [])
+  
+  const setSelectedMember = useCallback((memberId: string | null) => {
+    setFiltersState(prev => ({ ...prev, selectedMember: memberId }))
+  }, [])
+  
+  const setDateRange = useCallback((range: DateRange | { startDate: Date; endDate: Date }) => {
+    const normalized: DateRange = {
+      start: 'start' in range ? range.start : range.startDate,
+      end: 'end' in range ? range.end : range.endDate,
+      startDate: 'startDate' in range ? range.startDate : range.start,
+      endDate: 'endDate' in range ? range.endDate : range.end,
+    }
+    setFiltersState(prev => ({ ...prev, dateRange: normalized }))
+  }, [])
+  
+  // ============================================================================
+  // CARREGAMENTO DE DADOS
+  // ============================================================================
+  
+  const loadData = useCallback(async () => {
+    if (!user) {
+      setLoading(false)
+      return
+    }
     
-    setFilters({
-      selectedMember: null,
-      dateRange: { startDate: startOfMonth, endDate: endOfMonth },
-      transactionType: 'all',
-      searchText: '',
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const [
+        { data: membersData, error: membersError },
+        { data: categoriesData, error: categoriesError },
+        { data: accountsData, error: accountsError },
+        { data: transactionsData, error: transactionsError },
+        { data: recurringData, error: recurringError },
+      ] = await Promise.all([
+        supabase.from('family_members').select('*').eq('is_active', true).order('created_at'),
+        supabase.from('categories').select('*').eq('is_active', true).order('name'),
+        supabase.from('accounts').select('*').eq('is_active', true).order('name'),
+        supabase.from('transactions').select('*').order('date', { ascending: false }),
+        supabase.from('recurring_transactions').select('*').eq('is_active', true).order('description'),
+      ])
+      
+      if (membersError) throw membersError
+      if (categoriesError) throw categoriesError
+      if (accountsError) throw accountsError
+      if (transactionsError) throw transactionsError
+      if (recurringError) throw recurringError
+      
+      setFamilyMembers((membersData || []).map(normalizeFamilyMember))
+      setCategories(categoriesData || [])
+      setAccounts((accountsData || []).map(normalizeAccount))
+      setTransactions((transactionsData || []).map(normalizeTransaction))
+      setRecurringTransactions(recurringData || [])
+    } catch (err) {
+      console.error('Error loading data:', err)
+      setError('Erro ao carregar dados. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+  
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+  
+  // ============================================================================
+  // DADOS DERIVADOS
+  // ============================================================================
+  
+  const creditCards = useMemo(() => {
+    return accounts.filter(a => a.type === 'CREDIT_CARD')
+  }, [accounts])
+  
+  const bankAccounts = useMemo(() => {
+    return accounts.filter(a => a.type !== 'CREDIT_CARD')
+  }, [accounts])
+  
+  // ============================================================================
+  // CÁLCULOS
+  // ============================================================================
+  
+  const calculateTotalBalance = useCallback(() => {
+    const bankBalance = accounts
+      .filter(a => a.type !== 'CREDIT_CARD')
+      .reduce((sum, a) => sum + Number(a.balance), 0)
+    
+    const creditBills = accounts
+      .filter(a => a.type === 'CREDIT_CARD')
+      .reduce((sum, a) => sum + Number(a.currentBill || a.current_bill || 0), 0)
+    
+    return bankBalance - creditBills
+  }, [accounts])
+  
+  const totalBalance = useMemo(() => calculateTotalBalance(), [calculateTotalBalance])
+  
+  const calculateIncomeForPeriod = useCallback(() => {
+    return transactions
+      .filter(t => {
+        const date = new Date(t.date)
+        const type = t.type.toUpperCase()
+        const status = (t.status || 'COMPLETED').toUpperCase()
+        return (
+          type === 'INCOME' &&
+          status === 'COMPLETED' &&
+          date >= filters.dateRange.start &&
+          date <= filters.dateRange.end &&
+          (filters.selectedMember === null || t.member_id === filters.selectedMember || t.memberId === filters.selectedMember)
+        )
+      })
+      .reduce((sum, t) => sum + Number(t.amount || t.value), 0)
+  }, [transactions, filters])
+  
+  const totalIncome = useMemo(() => calculateIncomeForPeriod(), [calculateIncomeForPeriod])
+  
+  const calculateExpensesForPeriod = useCallback(() => {
+    return transactions
+      .filter(t => {
+        const date = new Date(t.date)
+        const type = t.type.toUpperCase()
+        const status = (t.status || 'COMPLETED').toUpperCase()
+        return (
+          type === 'EXPENSE' &&
+          status === 'COMPLETED' &&
+          date >= filters.dateRange.start &&
+          date <= filters.dateRange.end &&
+          (filters.selectedMember === null || t.member_id === filters.selectedMember || t.memberId === filters.selectedMember)
+        )
+      })
+      .reduce((sum, t) => sum + Number(t.amount || t.value), 0)
+  }, [transactions, filters])
+  
+  const totalExpenses = useMemo(() => calculateExpensesForPeriod(), [calculateExpensesForPeriod])
+  
+  const savingsRate = useMemo(() => {
+    if (totalIncome === 0) return 0
+    return ((totalIncome - totalExpenses) / totalIncome) * 100
+  }, [totalIncome, totalExpenses])
+  
+  const calculateCategoryPercentage = useCallback((categoryTotal: number) => {
+    if (totalIncome === 0) return 0
+    return (categoryTotal / totalIncome) * 100
+  }, [totalIncome])
+  
+  const calculateExpensesByCategory = useCallback((): ExpenseByCategory[] => {
+    const categoryMap = new Map<string, ExpenseByCategory>()
+    
+    transactions
+      .filter(t => {
+        const date = new Date(t.date)
+        const type = t.type.toUpperCase()
+        const status = (t.status || 'COMPLETED').toUpperCase()
+        const catId = t.category_id || t.categoryId
+        return (
+          type === 'EXPENSE' &&
+          status === 'COMPLETED' &&
+          catId &&
+          date >= filters.dateRange.start &&
+          date <= filters.dateRange.end &&
+          (filters.selectedMember === null || t.member_id === filters.selectedMember || t.memberId === filters.selectedMember)
+        )
+      })
+      .forEach(t => {
+        const catId = t.category_id || t.categoryId
+        const category = categories.find(c => c.id === catId)
+        if (!category) return
+        
+        const existing = categoryMap.get(category.id)
+        const amount = Number(t.amount || t.value)
+        if (existing) {
+          existing.total += amount
+          existing.count += 1
+        } else {
+          categoryMap.set(category.id, {
+            categoryId: category.id,
+            categoryName: category.name,
+            categoryIcon: category.icon,
+            categoryColor: category.color,
+            total: amount,
+            count: 1,
+            percentage: 0,
+            category: category.name,
+          })
+        }
+      })
+    
+    const result = Array.from(categoryMap.values())
+    
+    result.forEach(item => {
+      item.percentage = totalIncome > 0 ? (item.total / totalIncome) * 100 : 0
     })
-  }, [])
-
-  // ===== CRUD: TRANSACTIONS =====
-  const addTransaction = useCallback((transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+    
+    return result.sort((a, b) => b.total - a.total)
+  }, [transactions, categories, filters, totalIncome])
+  
+  const expensesByCategory = useMemo(() => calculateExpensesByCategory(), [calculateExpensesByCategory])
+  
+  // ============================================================================
+  // CRUD - FAMILY MEMBERS
+  // ============================================================================
+  
+  const addFamilyMember = useCallback(async (member: Partial<FamilyMember>): Promise<FamilyMember | null> => {
+    if (!user) return null
+    
+    const insertData = {
+      user_id: user.id,
+      name: member.name || '',
+      role: member.role || '',
+      avatar_url: member.avatarUrl || member.avatar_url || null,
+      monthly_income: member.monthlyIncome || member.monthly_income || 0,
+      color: member.color || '#3247FF',
     }
-    setTransactions(prev => [...prev, newTransaction])
-  }, [])
-
-  const updateTransaction = useCallback((id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev =>
-      prev.map(tx =>
-        tx.id === id ? { ...tx, ...updates, updatedAt: new Date() } : tx
-      )
-    )
-  }, [])
-
-  const deleteTransaction = useCallback((id: string) => {
-    setTransactions(prev => prev.filter(tx => tx.id !== id))
-  }, [])
-
-  // ===== CRUD: GOALS =====
-  const addGoal = useCallback((goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
-    const newGoal: Goal = {
-      ...goal,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+    
+    const { data, error } = await supabase
+      .from('family_members')
+      .insert(insertData)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding family member:', error)
+      return null
     }
-    setGoals(prev => [...prev, newGoal])
-  }, [])
-
-  const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
-    setGoals(prev =>
-      prev.map(g =>
-        g.id === id ? { ...g, ...updates, updatedAt: new Date() } : g
-      )
-    )
-  }, [])
-
-  const deleteGoal = useCallback((id: string) => {
-    setGoals(prev => prev.filter(g => g.id !== id))
-  }, [])
-
-  // ===== CRUD: CREDIT CARDS =====
-  const addCreditCard = useCallback((card: Omit<CreditCard, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
-    const newCard: CreditCard = {
-      ...card,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+    
+    const normalized = normalizeFamilyMember(data)
+    setFamilyMembers(prev => [...prev, normalized])
+    return normalized
+  }, [user])
+  
+  const updateFamilyMember = useCallback(async (id: string, data: Partial<FamilyMember>): Promise<boolean> => {
+    const updateData: any = {}
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.role !== undefined) updateData.role = data.role
+    if (data.avatarUrl !== undefined || data.avatar_url !== undefined) {
+      updateData.avatar_url = data.avatarUrl || data.avatar_url
     }
-    setCreditCards(prev => [...prev, newCard])
-  }, [])
-
-  const updateCreditCard = useCallback((id: string, updates: Partial<CreditCard>) => {
-    setCreditCards(prev =>
-      prev.map(c =>
-        c.id === id ? { ...c, ...updates, updatedAt: new Date() } : c
-      )
-    )
-  }, [])
-
-  const deleteCreditCard = useCallback((id: string) => {
-    setCreditCards(prev => prev.filter(c => c.id !== id))
-  }, [])
-
-  // ===== CRUD: BANK ACCOUNTS =====
-  const addBankAccount = useCallback((account: Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
-    const newAccount: BankAccount = {
-      ...account,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+    if (data.monthlyIncome !== undefined || data.monthly_income !== undefined) {
+      updateData.monthly_income = data.monthlyIncome || data.monthly_income
     }
-    setBankAccounts(prev => [...prev, newAccount])
-  }, [])
-
-  const updateBankAccount = useCallback((id: string, updates: Partial<BankAccount>) => {
-    setBankAccounts(prev =>
-      prev.map(a =>
-        a.id === id ? { ...a, ...updates, updatedAt: new Date() } : a
-      )
-    )
-  }, [])
-
-  const deleteBankAccount = useCallback((id: string) => {
-    setBankAccounts(prev => prev.filter(a => a.id !== id))
-  }, [])
-
-  // ===== CRUD: FAMILY MEMBERS =====
-  const addFamilyMember = useCallback((member: Omit<FamilyMember, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
-    const newMember: FamilyMember = {
-      ...member,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+    if (data.color !== undefined) updateData.color = data.color
+    
+    const { error } = await supabase
+      .from('family_members')
+      .update(updateData)
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error updating family member:', error)
+      return false
     }
-    setFamilyMembers(prev => [...prev, newMember])
+    
+    setFamilyMembers(prev => prev.map(m => m.id === id ? { ...m, ...data, ...updateData } : m))
+    return true
   }, [])
-
-  const updateFamilyMember = useCallback((id: string, updates: Partial<FamilyMember>) => {
-    setFamilyMembers(prev =>
-      prev.map(m =>
-        m.id === id ? { ...m, ...updates, updatedAt: new Date() } : m
-      )
-    )
-  }, [])
-
-  const deleteFamilyMember = useCallback((id: string) => {
+  
+  const deleteFamilyMember = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('family_members')
+      .update({ is_active: false })
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting family member:', error)
+      return false
+    }
+    
     setFamilyMembers(prev => prev.filter(m => m.id !== id))
+    return true
   }, [])
-
-  // ===== CRUD: BILLS =====
-  const addBill = useCallback((bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date()
+  
+  // ============================================================================
+  // CRUD - CATEGORIES
+  // ============================================================================
+  
+  const addCategory = useCallback(async (category: Partial<Category>): Promise<Category | null> => {
+    if (!user) return null
+    
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({
+        user_id: user.id,
+        name: category.name || '',
+        icon: category.icon || '📌',
+        type: category.type || 'EXPENSE',
+        color: category.color || '#3247FF',
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding category:', error)
+      return null
+    }
+    
+    setCategories(prev => [...prev, data])
+    return data
+  }, [user])
+  
+  const updateCategory = useCallback(async (id: string, data: Partial<Category>): Promise<boolean> => {
+    const { error } = await supabase
+      .from('categories')
+      .update(data)
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error updating category:', error)
+      return false
+    }
+    
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
+    return true
+  }, [])
+  
+  const deleteCategory = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('categories')
+      .update({ is_active: false })
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting category:', error)
+      return false
+    }
+    
+    setCategories(prev => prev.filter(c => c.id !== id))
+    return true
+  }, [])
+  
+  // ============================================================================
+  // CRUD - ACCOUNTS
+  // ============================================================================
+  
+  const addAccount = useCallback(async (account: Partial<Account>): Promise<Account | null> => {
+    if (!user) return null
+    
+    const insertData = {
+      user_id: user.id,
+      type: account.type || 'CHECKING',
+      name: account.name || '',
+      bank: account.bank || account.name || '',
+      last_digits: account.lastDigits || account.last_digits || null,
+      holder_id: account.holderId || account.holder_id,
+      balance: account.balance || 0,
+      credit_limit: account.creditLimit || account.credit_limit || null,
+      current_bill: account.currentBill || account.current_bill || 0,
+      due_day: account.dueDay || account.due_day || null,
+      closing_day: account.closingDay || account.closing_day || null,
+      theme: account.theme || 'black',
+      logo_url: account.logoUrl || account.logo_url || null,
+      color: account.color || '#3247FF',
+    }
+    
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert(insertData)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding account:', error)
+      return null
+    }
+    
+    const normalized = normalizeAccount(data)
+    setAccounts(prev => [...prev, normalized])
+    return normalized
+  }, [user])
+  
+  const addBankAccount = useCallback(async (account: Partial<Account>): Promise<Account | null> => {
+    return addAccount({ ...account, type: 'CHECKING' })
+  }, [addAccount])
+  
+  const addCreditCard = useCallback(async (card: Partial<Account>): Promise<Account | null> => {
+    return addAccount({ ...card, type: 'CREDIT_CARD' })
+  }, [addAccount])
+  
+  const updateAccount = useCallback(async (id: string, data: Partial<Account>): Promise<boolean> => {
+    const updateData: any = {}
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.bank !== undefined) updateData.bank = data.bank
+    if (data.balance !== undefined) updateData.balance = data.balance
+    if (data.creditLimit !== undefined || data.credit_limit !== undefined) {
+      updateData.credit_limit = data.creditLimit || data.credit_limit
+    }
+    if (data.currentBill !== undefined || data.current_bill !== undefined) {
+      updateData.current_bill = data.currentBill || data.current_bill
+    }
+    if (data.dueDay !== undefined || data.due_day !== undefined) {
+      updateData.due_day = data.dueDay || data.due_day
+    }
+    if (data.closingDay !== undefined || data.closing_day !== undefined) {
+      updateData.closing_day = data.closingDay || data.closing_day
+    }
+    if (data.theme !== undefined) updateData.theme = data.theme
+    if (data.lastDigits !== undefined || data.last_digits !== undefined) {
+      updateData.last_digits = data.lastDigits || data.last_digits
+    }
+    
+    const { error } = await supabase
+      .from('accounts')
+      .update(updateData)
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error updating account:', error)
+      return false
+    }
+    
+    setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...data, ...updateData } : a))
+    return true
+  }, [])
+  
+  const deleteAccount = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('accounts')
+      .update({ is_active: false })
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting account:', error)
+      return false
+    }
+    
+    setAccounts(prev => prev.filter(a => a.id !== id))
+    return true
+  }, [])
+  
+  // ============================================================================
+  // CRUD - TRANSACTIONS
+  // ============================================================================
+  
+  const addTransaction = useCallback(async (transaction: Partial<Transaction>): Promise<Transaction | null> => {
+    if (!user) return null
+    
+    const type = (transaction.type || 'EXPENSE').toUpperCase() as 'INCOME' | 'EXPENSE'
+    const status = (transaction.status || 'COMPLETED').toUpperCase() as 'PENDING' | 'COMPLETED'
+    
+    const insertData = {
+      user_id: user.id,
+      type,
+      amount: transaction.amount || transaction.value || 0,
+      description: transaction.description || '',
+      date: transaction.date || new Date().toISOString().split('T')[0],
+      category_id: transaction.categoryId || transaction.category_id || null,
+      account_id: transaction.accountId || transaction.account_id || null,
+      member_id: transaction.memberId || transaction.member_id || null,
+      total_installments: transaction.installments || transaction.total_installments || 1,
+      is_recurring: transaction.isRecurring || transaction.is_recurring || false,
+      status,
+    }
+    
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(insertData)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding transaction:', error)
+      return null
+    }
+    
+    const normalized = normalizeTransaction(data)
+    setTransactions(prev => [normalized, ...prev])
+    return normalized
+  }, [user])
+  
+  const updateTransaction = useCallback(async (id: string, data: Partial<Transaction>): Promise<boolean> => {
+    const updateData: any = {}
+    if (data.type !== undefined) updateData.type = data.type.toUpperCase()
+    if (data.amount !== undefined || data.value !== undefined) {
+      updateData.amount = data.amount || data.value
+    }
+    if (data.description !== undefined) updateData.description = data.description
+    if (data.date !== undefined) updateData.date = data.date
+    if (data.categoryId !== undefined || data.category_id !== undefined) {
+      updateData.category_id = data.categoryId || data.category_id
+    }
+    if (data.accountId !== undefined || data.account_id !== undefined) {
+      updateData.account_id = data.accountId || data.account_id
+    }
+    if (data.memberId !== undefined || data.member_id !== undefined) {
+      updateData.member_id = data.memberId || data.member_id
+    }
+    if (data.status !== undefined) updateData.status = data.status.toUpperCase()
+    
+    const { error } = await supabase
+      .from('transactions')
+      .update(updateData)
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error updating transaction:', error)
+      return false
+    }
+    
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...data, ...updateData } : t))
+    return true
+  }, [])
+  
+  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting transaction:', error)
+      return false
+    }
+    
+    setTransactions(prev => prev.filter(t => t.id !== id))
+    return true
+  }, [])
+  
+  // ============================================================================
+  // CRUD - RECURRING TRANSACTIONS
+  // ============================================================================
+  
+  const addRecurringTransaction = useCallback(async (recurring: Partial<RecurringTransaction>): Promise<RecurringTransaction | null> => {
+    if (!user) return null
+    
+    const { data, error } = await supabase
+      .from('recurring_transactions')
+      .insert({
+        user_id: user.id,
+        type: recurring.type || 'EXPENSE',
+        amount: recurring.amount || 0,
+        description: recurring.description || '',
+        category_id: recurring.category_id || null,
+        account_id: recurring.account_id || null,
+        member_id: recurring.member_id || null,
+        frequency: recurring.frequency || 'MONTHLY',
+        day_of_month: recurring.day_of_month || null,
+        start_date: recurring.start_date || new Date().toISOString().split('T')[0],
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding recurring transaction:', error)
+      return null
+    }
+    
+    setRecurringTransactions(prev => [...prev, data])
+    return data
+  }, [user])
+  
+  const updateRecurringTransaction = useCallback(async (id: string, data: Partial<RecurringTransaction>): Promise<boolean> => {
+    const { error } = await supabase
+      .from('recurring_transactions')
+      .update(data)
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error updating recurring transaction:', error)
+      return false
+    }
+    
+    setRecurringTransactions(prev => prev.map(r => r.id === id ? { ...r, ...data } : r))
+    return true
+  }, [])
+  
+  const deleteRecurringTransaction = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('recurring_transactions')
+      .update({ is_active: false })
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting recurring transaction:', error)
+      return false
+    }
+    
+    setRecurringTransactions(prev => prev.filter(r => r.id !== id))
+    return true
+  }, [])
+  
+  // ============================================================================
+  // CRUD - BILLS (Local state for now)
+  // ============================================================================
+  
+  const addBill = useCallback(async (bill: Partial<Bill>): Promise<Bill | null> => {
     const newBill: Bill = {
-      ...bill,
-      id: generateId(),
-      createdAt: now,
-      updatedAt: now,
+      id: crypto.randomUUID(),
+      description: bill.description || '',
+      value: bill.value || 0,
+      dueDay: bill.dueDay || 1,
+      accountId: bill.accountId || null,
+      isRecurring: bill.isRecurring || false,
+      isPaid: false,
     }
     setBills(prev => [...prev, newBill])
+    return newBill
   }, [])
-
-  const updateBill = useCallback((id: string, updates: Partial<Bill>) => {
-    setBills(prev =>
-      prev.map(b =>
-        b.id === id ? { ...b, ...updates, updatedAt: new Date() } : b
-      )
-    )
-  }, [])
-
-  const deleteBill = useCallback((id: string) => {
-    setBills(prev => prev.filter(b => b.id !== id))
-  }, [])
-
-  /**
-   * Marca uma conta como paga
-   * - Para contas recorrentes: agenda próxima ocorrência para o mês seguinte
-   * - Para contas parceladas: atualiza para próxima parcela
-   * - Para contas únicas: remove da lista
-   */
-  const markBillAsPaid = useCallback((id: string) => {
-    setBills(prev => {
-      const bill = prev.find(b => b.id === id)
-      if (!bill) return prev
-
-      // Se é recorrente, cria nova bill para o próximo mês
-      if (bill.isRecurring) {
-        const nextDueDate = new Date(bill.dueDate)
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
-        
-        const newBill: Bill = {
-          ...bill,
-          id: generateId(),
-          dueDate: nextDueDate,
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-        
-        // Remove a atual e adiciona a próxima
-        return [...prev.filter(b => b.id !== id), newBill]
-      }
-
-      // Se é parcelada e ainda tem parcelas
-      if (bill.installments && bill.currentInstallment && bill.currentInstallment < bill.installments) {
-        const nextDueDate = new Date(bill.dueDate)
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
-        
-        const newBill: Bill = {
-          ...bill,
-          id: generateId(),
-          dueDate: nextDueDate,
-          currentInstallment: bill.currentInstallment + 1,
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-        
-        // Remove a atual e adiciona a próxima parcela
-        return [...prev.filter(b => b.id !== id), newBill]
-      }
-
-      // Conta única ou última parcela: apenas remove
-      return prev.filter(b => b.id !== id)
-    })
-  }, [])
-
-  /**
-   * Retorna bills pendentes ordenadas por data de vencimento (mais próximas primeiro)
-   */
-  const getPendingBills = useCallback((): Bill[] => {
-    return bills
-      .filter(b => b.status === 'pending')
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-  }, [bills])
-
-  // ===== HELPERS =====
-  const getMemberById = useCallback((id: string): FamilyMember | undefined => {
-    return familyMembers.find(m => m.id === id)
-  }, [familyMembers])
-
-  const getAccountById = useCallback((id: string): BankAccount | CreditCard | undefined => {
-    return bankAccounts.find(a => a.id === id) || creditCards.find(c => c.id === id)
-  }, [bankAccounts, creditCards])
-
-  const getCardById = useCallback((id: string): CreditCard | undefined => {
-    return creditCards.find(c => c.id === id)
-  }, [creditCards])
-
-  /**
-   * Retorna transações vinculadas a um cartão específico
-   */
-  const getTransactionsByCard = useCallback((cardId: string): Transaction[] => {
-    return transactions.filter(tx => tx.accountId === cardId)
-  }, [transactions])
-
-  // ===== CÁLCULOS DERIVADOS =====
   
-  /**
-   * Retorna transações filtradas por todos os filtros ativos
-   */
-  const getFilteredTransactions = useCallback((): Transaction[] => {
-    return transactions.filter(tx => {
-      // Filtro por membro
-      if (filters.selectedMember && tx.memberId !== filters.selectedMember) {
+  const getPendingBills = useCallback(() => {
+    return bills.filter(b => !b.isPaid)
+  }, [bills])
+  
+  const markBillAsPaid = useCallback(async (id: string): Promise<boolean> => {
+    setBills(prev => prev.map(b => b.id === id ? { ...b, isPaid: true } : b))
+    return true
+  }, [])
+  
+  // ============================================================================
+  // HELPERS
+  // ============================================================================
+  
+  const getFilteredTransactions = useCallback(() => {
+    return transactions.filter(t => {
+      const date = new Date(t.date)
+      const type = t.type.toLowerCase()
+      
+      // Filtro de período
+      if (date < filters.dateRange.start || date > filters.dateRange.end) {
         return false
       }
-
-      // Filtro por período
-      const txDate = new Date(tx.date)
-      if (txDate < filters.dateRange.startDate || txDate > filters.dateRange.endDate) {
+      
+      // Filtro de membro
+      const memberId = t.member_id || t.memberId
+      if (filters.selectedMember && memberId !== filters.selectedMember) {
         return false
       }
-
-      // Filtro por tipo
-      if (filters.transactionType !== 'all' && tx.type !== filters.transactionType) {
+      
+      // Filtro de tipo
+      if (filters.transactionType !== 'all' && type !== filters.transactionType) {
         return false
       }
-
-      // Filtro por texto de busca
+      
+      // Filtro de busca
       if (filters.searchText) {
-        const searchLower = filters.searchText.toLowerCase()
-        const matchesDescription = tx.description.toLowerCase().includes(searchLower)
-        const matchesCategory = tx.category.toLowerCase().includes(searchLower)
-        if (!matchesDescription && !matchesCategory) {
+        const search = filters.searchText.toLowerCase()
+        const catId = t.category_id || t.categoryId
+        const category = categories.find(c => c.id === catId)
+        const matchDescription = t.description.toLowerCase().includes(search)
+        const matchCategory = category?.name.toLowerCase().includes(search)
+        if (!matchDescription && !matchCategory) {
           return false
         }
       }
-
+      
       return true
     })
-  }, [transactions, filters])
-
-  /**
-   * Calcula saldo total (soma de contas - faturas de cartões)
-   */
-  const calculateTotalBalance = useCallback((): number => {
-    const accountsTotal = bankAccounts.reduce((sum, acc) => sum + acc.balance, 0)
-    const cardsTotal = creditCards.reduce((sum, card) => sum + card.currentBill, 0)
-    return accountsTotal - cardsTotal
-  }, [bankAccounts, creditCards])
-
-  /**
-   * Calcula total de receitas no período filtrado
-   */
-  const calculateIncomeForPeriod = useCallback((): number => {
-    const filtered = getFilteredTransactions()
-    return filtered
-      .filter(tx => tx.type === 'income' && tx.status === 'completed')
-      .reduce((sum, tx) => sum + tx.value, 0)
-  }, [getFilteredTransactions])
-
-  /**
-   * Calcula total de despesas no período filtrado
-   */
-  const calculateExpensesForPeriod = useCallback((): number => {
-    const filtered = getFilteredTransactions()
-    return filtered
-      .filter(tx => tx.type === 'expense' && tx.status === 'completed')
-      .reduce((sum, tx) => sum + tx.value, 0)
-  }, [getFilteredTransactions])
-
-  /**
-   * Agrupa despesas por categoria, ordenadas por valor decrescente
-   */
-  /**
-   * Agrupa despesas por categoria, ordenadas por valor decrescente
-   * 
-   * Conforme documentação:
-   * - Busca todas as transações do tipo "despesa"
-   * - Aplica filtros ativos (período, membro, busca textual)
-   * - Agrupa por categoria e soma valores
-   * - Calcula percentual em relação à RECEITA TOTAL (não despesas)
-   * - Ordena por valor decrescente
-   */
-  const calculateExpensesByCategory = useCallback((): ExpenseByCategory[] => {
-    const filtered = getFilteredTransactions()
-    const expenses = filtered.filter(tx => tx.type === 'expense' && tx.status === 'completed')
-    
-    // Calcula receita total do período (para percentual)
-    const totalIncome = filtered
-      .filter(tx => tx.type === 'income' && tx.status === 'completed')
-      .reduce((sum, tx) => sum + tx.value, 0)
-
-    // Agrupa por categoria
-    const categoryMap = new Map<string, { total: number; count: number }>()
-    
-    expenses.forEach(tx => {
-      const current = categoryMap.get(tx.category) || { total: 0, count: 0 }
-      categoryMap.set(tx.category, {
-        total: current.total + tx.value,
-        count: current.count + 1,
-      })
-    })
-
-    // Converte para array e calcula percentuais em relação à receita
-    // Exemplo: se Alimentação = R$ 1.500 e receita = R$ 5.000, percentual = 30%
-    const result: ExpenseByCategory[] = Array.from(categoryMap.entries()).map(([category, data]) => ({
-      category,
-      total: data.total,
-      count: data.count,
-      percentage: totalIncome > 0 ? (data.total / totalIncome) * 100 : 0,
-    }))
-
-    // Ordena por valor decrescente (maior gasto primeiro)
-    return result.sort((a, b) => b.total - a.total)
-  }, [getFilteredTransactions])
-
-  /**
-   * Agrupa despesas por membro da família, ordenadas por valor decrescente
-   */
-  const calculateExpensesByMember = useCallback((): ExpenseByMember[] => {
-    const filtered = getFilteredTransactions()
-    const expenses = filtered.filter(tx => tx.type === 'expense' && tx.status === 'completed')
-    const totalExpenses = expenses.reduce((sum, tx) => sum + tx.value, 0)
-
-    // Agrupa por membro
-    const memberMap = new Map<string | null, { total: number; count: number }>()
-    
-    expenses.forEach(tx => {
-      const current = memberMap.get(tx.memberId) || { total: 0, count: 0 }
-      memberMap.set(tx.memberId, {
-        total: current.total + tx.value,
-        count: current.count + 1,
-      })
-    })
-
-    // Converte para array e calcula percentuais
-    const result: ExpenseByMember[] = Array.from(memberMap.entries()).map(([memberId, data]) => {
-      const member = memberId ? familyMembers.find(m => m.id === memberId) : null
-      return {
-        memberId,
-        memberName: member ? member.name : 'Família',
-        total: data.total,
-        count: data.count,
-        percentage: totalExpenses > 0 ? (data.total / totalExpenses) * 100 : 0,
-      }
-    })
-
-    // Ordena por valor decrescente
-    return result.sort((a, b) => b.total - a.total)
-  }, [getFilteredTransactions, familyMembers])
-
-  /**
-   * Calcula percentual de uma categoria em relação à receita total
-   */
-  const calculateCategoryPercentage = useCallback((category: string): number => {
-    const income = calculateIncomeForPeriod()
-    if (income === 0) return 0
-
-    const filtered = getFilteredTransactions()
-    const categoryTotal = filtered
-      .filter(tx => tx.type === 'expense' && tx.category === category && tx.status === 'completed')
-      .reduce((sum, tx) => sum + tx.value, 0)
-
-    return (categoryTotal / income) * 100
-  }, [getFilteredTransactions, calculateIncomeForPeriod])
-
-  /**
-   * Calcula taxa de economia: (receitas - despesas) / receitas × 100
-   */
-  const calculateSavingsRate = useCallback((): number => {
-    const income = calculateIncomeForPeriod()
-    const expenses = calculateExpensesForPeriod()
-    
-    if (income === 0) return 0
-    return ((income - expenses) / income) * 100
-  }, [calculateIncomeForPeriod, calculateExpensesForPeriod])
-
-  // ===== VALOR DO CONTEXTO =====
-  const value = useMemo<FinanceContextType>(() => ({
-    // Estado principal
+  }, [transactions, categories, filters])
+  
+  const getTransactionsByAccount = useCallback((accountId: string) => {
+    return transactions.filter(t => (t.account_id || t.accountId) === accountId)
+  }, [transactions])
+  
+  const getTransactionsByCard = useCallback((cardId: string) => {
+    return transactions.filter(t => (t.account_id || t.accountId) === cardId)
+  }, [transactions])
+  
+  const getCreditCards = useCallback(() => {
+    return accounts.filter(a => a.type === 'CREDIT_CARD')
+  }, [accounts])
+  
+  const getBankAccounts = useCallback(() => {
+    return accounts.filter(a => a.type !== 'CREDIT_CARD')
+  }, [accounts])
+  
+  const refreshData = useCallback(async () => {
+    await loadData()
+  }, [loadData])
+  
+  // ============================================================================
+  // VALOR DO CONTEXTO
+  // ============================================================================
+  
+  const value: FinanceContextType = {
+    loading,
+    error,
+    familyMembers,
+    categories,
+    accounts,
     transactions,
-    goals,
+    recurringTransactions,
     creditCards,
     bankAccounts,
-    familyMembers,
+    goals,
     bills,
-
-    // Filtros
     filters,
+    setFilters,
+    setSearchText,
+    setTransactionType,
     setSelectedMember,
     setDateRange,
-    setTransactionType,
-    setSearchText,
-    resetFilters,
-
-    // CRUD: Transactions
-    addTransaction,
-    updateTransaction,
-    deleteTransaction,
-
-    // CRUD: Goals
-    addGoal,
-    updateGoal,
-    deleteGoal,
-
-    // CRUD: Credit Cards
-    addCreditCard,
-    updateCreditCard,
-    deleteCreditCard,
-
-    // CRUD: Bank Accounts
-    addBankAccount,
-    updateBankAccount,
-    deleteBankAccount,
-
-    // CRUD: Family Members
-    addFamilyMember,
-    updateFamilyMember,
-    deleteFamilyMember,
-
-    // CRUD: Bills
-    addBill,
-    updateBill,
-    deleteBill,
-    markBillAsPaid,
-    getPendingBills,
-
-    // Cálculos derivados
-    getFilteredTransactions,
+    totalBalance,
+    totalIncome,
+    totalExpenses,
+    savingsRate,
+    expensesByCategory,
     calculateTotalBalance,
     calculateIncomeForPeriod,
     calculateExpensesForPeriod,
     calculateExpensesByCategory,
-    calculateExpensesByMember,
     calculateCategoryPercentage,
-    calculateSavingsRate,
-
-    // Helpers
-    getMemberById,
-    getAccountById,
-    getCardById,
-    getTransactionsByCard,
-  }), [
-    transactions,
-    goals,
-    creditCards,
-    bankAccounts,
-    familyMembers,
-    bills,
-    filters,
-    setSelectedMember,
-    setDateRange,
-    setTransactionType,
-    setSearchText,
-    resetFilters,
-    addTransaction,
-    updateTransaction,
-    deleteTransaction,
-    addGoal,
-    updateGoal,
-    deleteGoal,
-    addCreditCard,
-    updateCreditCard,
-    deleteCreditCard,
-    addBankAccount,
-    updateBankAccount,
-    deleteBankAccount,
     addFamilyMember,
     updateFamilyMember,
     deleteFamilyMember,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    addBankAccount,
+    addCreditCard,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    addRecurringTransaction,
+    updateRecurringTransaction,
+    deleteRecurringTransaction,
     addBill,
-    updateBill,
-    deleteBill,
-    markBillAsPaid,
     getPendingBills,
+    markBillAsPaid,
     getFilteredTransactions,
-    calculateTotalBalance,
-    calculateIncomeForPeriod,
-    calculateExpensesForPeriod,
-    calculateExpensesByCategory,
-    calculateExpensesByMember,
-    calculateCategoryPercentage,
-    calculateSavingsRate,
-    getMemberById,
-    getAccountById,
-    getCardById,
+    getTransactionsByAccount,
     getTransactionsByCard,
-  ])
-
-  return (
-    <FinanceContext.Provider value={value}>
-      {children}
-    </FinanceContext.Provider>
-  )
+    getCreditCards,
+    getBankAccounts,
+    refreshData,
+  }
+  
+  return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
 }
 
 // ============================================================================
-// HOOK CUSTOMIZADO
+// HOOK
 // ============================================================================
 
-/**
- * Hook customizado para acessar o contexto financeiro
- * Este é o único ponto de acesso ao contexto em toda a aplicação
- * 
- * @throws Error se usado fora do FinanceProvider
- * 
- * @example
- * const { transactions, addTransaction, calculateTotalBalance } = useFinance()
- */
 export function useFinance(): FinanceContextType {
   const context = useContext(FinanceContext)
-  
   if (context === undefined) {
     throw new Error('useFinance deve ser usado dentro de um FinanceProvider')
   }
-  
   return context
 }
-
-// ============================================================================
-// EXPORTAÇÕES ADICIONAIS
-// ============================================================================
-
-export { CATEGORIES }
-export type { DateRange, TransactionFilterType, FiltersState, ExpenseByCategory, ExpenseByMember }

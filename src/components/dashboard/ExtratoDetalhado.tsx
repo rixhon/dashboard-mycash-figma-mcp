@@ -96,18 +96,19 @@ const ChevronRightIcon = () => (
 /**
  * Formata valor monetário com sinal
  */
-function formatValueWithSign(value: number, type: 'income' | 'expense'): string {
+function formatValueWithSign(value: number, type: string): string {
   const formatted = value.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
-  return type === 'income' ? `+${formatted}` : `-${formatted}`
+  const normalizedType = type.toLowerCase()
+  return normalizedType === 'income' ? `+${formatted}` : `-${formatted}`
 }
 
 /**
  * Formata data como DD/MM/AAAA
  */
-function formatDate(date: Date): string {
+function formatDate(date: Date | string): string {
   const d = new Date(date)
   const day = d.getDate().toString().padStart(2, '0')
   const month = (d.getMonth() + 1).toString().padStart(2, '0')

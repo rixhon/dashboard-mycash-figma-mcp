@@ -156,7 +156,7 @@ function BankAccountItem({ account, onClick }: BankAccountItemProps) {
       {/* Footer */}
       <div className="flex items-center justify-between">
         <span className="text-[12px] text-gray-500">
-          Saldo atualizado {formatDate(account.updatedAt)}
+          Saldo atualizado {formatDate(new Date(account.updatedAt || account.updated_at || Date.now()))}
         </span>
         {/* Indicador circular (placeholder) */}
         <div className="w-8 h-8 rounded-full border-2 border-gray-200" />

@@ -14,4 +14,14 @@ export type {
   FiltersState,
   ExpenseByCategory,
   ExpenseByMember,
+  FamilyMember,
+  Category,
+  Account,
+  Transaction,
+  RecurringTransaction,
+  Bill,
+  Goal,
 } from './FinanceContext'
+
+export { AuthProvider, useAuth } from './AuthContext'
+export { SidebarProvider, useSidebar } from './SidebarContext'

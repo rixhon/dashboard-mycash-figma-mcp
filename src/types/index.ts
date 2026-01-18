@@ -1,60 +1,36 @@
 /**
  * Tipos TypeScript fundamentais para o sistema mycash+
- * Representam as cinco entidades principais do sistema
+ * Representam as entidades principais do sistema
  */
+
+// Re-exportar tipos do FinanceContext
+export {
+  CATEGORIES,
+  createDateRange,
+} from '@/contexts/FinanceContext'
+
+export type {
+  DateRange,
+  TransactionFilterType,
+  FiltersState,
+  ExpenseByCategory,
+  ExpenseByMember,
+} from '@/contexts/FinanceContext'
 
 /**
  * Tipo de transação: receita ou despesa
  */
-export type TransactionType = 'income' | 'expense';
+export type TransactionType = 'income' | 'expense' | 'INCOME' | 'EXPENSE';
 
 /**
  * Status da transação
  */
-export type TransactionStatus = 'pending' | 'completed' | 'cancelled';
+export type TransactionStatus = 'pending' | 'completed' | 'cancelled' | 'PENDING' | 'COMPLETED';
 
 /**
- * Entidade: Transaction (Transação)
+ * Tipo de conta
  */
-export interface Transaction {
-  id: string;
-  type: TransactionType;
-  value: number;
-  description: string;
-  category: string;
-  date: Date;
-  accountId: string | null; // ID da conta bancária ou cartão de crédito
-  memberId: string | null; // ID do membro da família (null = família geral)
-  installments: number; // Número de parcelas (1 = à vista)
-  currentInstallment: number; // Parcela atual (1 a installments)
-  status: TransactionStatus;
-  isRecurring: boolean; // Se é despesa recorrente
-  isPaid: boolean; // Se foi paga (para despesas)
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Entidade: Goal (Objetivo/Meta)
- */
-export interface Goal {
-  id: string;
-  title: string;
-  description: string;
-  targetAmount: number; // Valor alvo
-  currentAmount: number; // Valor atual acumulado
-  deadline: Date; // Data limite
-  category: string; // Categoria do objetivo
-  memberId: string | null; // ID do membro responsável (null = família)
-  isCompleted: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Tipo de conta: bancária ou cartão de crédito
- */
-export type AccountType = 'account' | 'creditCard';
+export type AccountType = 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD' | 'account' | 'creditCard';
 
 /**
  * Tema visual do cartão de crédito
@@ -62,71 +38,193 @@ export type AccountType = 'account' | 'creditCard';
 export type CreditCardTheme = 'black' | 'lime' | 'white';
 
 /**
- * Entidade: CreditCard (Cartão de Crédito)
- */
-export interface CreditCard {
-  id: string;
-  name: string; // Nome do cartão (ex: "Nubank Mastercard")
-  holderId: string; // ID do membro titular
-  closingDay: number; // Dia de fechamento (1-31)
-  dueDay: number; // Dia de vencimento (1-31)
-  limit: number; // Limite total
-  currentBill: number; // Fatura atual
-  theme: CreditCardTheme; // Tema visual
-  lastDigits?: string; // Últimos 4 dígitos (opcional)
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Entidade: BankAccount (Conta Bancária)
- */
-export interface BankAccount {
-  id: string;
-  name: string; // Nome da conta (ex: "Nubank Conta")
-  holderId: string; // ID do membro titular
-  balance: number; // Saldo atual
-  bankName?: string; // Nome do banco (opcional)
-  accountNumber?: string; // Número da conta (opcional)
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Entidade: FamilyMember (Membro da Família)
+ * Entidade: FamilyMember
  */
 export interface FamilyMember {
   id: string;
-  name: string; // Nome completo
-  role: string; // Função na família (ex: "Pai", "Mãe", "Filho")
-  avatarUrl?: string; // URL do avatar (opcional)
-  monthlyIncome?: number; // Renda mensal estimada (opcional)
-  email?: string; // Email (opcional)
-  createdAt: Date;
-  updatedAt: Date;
+  user_id?: string;
+  name: string;
+  role: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  monthlyIncome?: number;
+  monthly_income?: number;
+  color?: string;
+  email?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 }
 
 /**
- * Tipo unificado para Account (pode ser BankAccount ou CreditCard)
+ * Entidade: Category
  */
-export type Account = BankAccount | CreditCard;
-
-/**
- * Helper type guard para verificar se é CreditCard
- */
-export function isCreditCard(account: Account): account is CreditCard {
-  return 'closingDay' in account && 'dueDay' in account && 'limit' in account;
+export interface Category {
+  id: string;
+  user_id?: string;
+  name: string;
+  icon: string;
+  type: 'INCOME' | 'EXPENSE';
+  color: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 /**
- * Helper type guard para verificar se é BankAccount
+ * Entidade: Account (unifica contas e cartões)
  */
-export function isBankAccount(account: Account): account is BankAccount {
-  return 'balance' in account && !isCreditCard(account);
+export interface Account {
+  id: string;
+  user_id?: string;
+  type: AccountType | 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD';
+  name: string;
+  bank?: string;
+  last_digits?: string | null;
+  lastDigits?: string | null;
+  holder_id?: string;
+  holderId?: string;
+  balance?: number;
+  credit_limit?: number | null;
+  creditLimit?: number | null;
+  current_bill?: number;
+  currentBill?: number;
+  due_day?: number | null;
+  dueDay?: number | null;
+  closing_day?: number | null;
+  closingDay?: number | null;
+  theme?: string | null;
+  logo_url?: string | null;
+  logoUrl?: string | null;
+  color?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  // Alias para compatibilidade com CreditCard
+  limit?: number | null;
 }
 
 /**
- * Tipo de conta/bill: fixa (recorrente mensal) ou cartão (fatura)
+ * Alias para CreditCard
+ */
+export interface CreditCard {
+  id: string;
+  name: string;
+  bank?: string;
+  holderId?: string;
+  holder_id?: string;
+  closingDay?: number | null;
+  closing_day?: number | null;
+  dueDay?: number | null;
+  due_day?: number | null;
+  limit?: number | null;
+  creditLimit?: number | null;
+  credit_limit?: number | null;
+  currentBill?: number;
+  current_bill?: number;
+  theme?: CreditCardTheme | string | null;
+  lastDigits?: string | null;
+  last_digits?: string | null;
+  logoUrl?: string | null;
+  logo_url?: string | null;
+  type?: AccountType | string;
+  balance?: number;
+  color?: string;
+  is_active?: boolean;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+/**
+ * Alias para BankAccount
+ */
+export interface BankAccount {
+  id: string;
+  name: string;
+  bank?: string;
+  holderId?: string;
+  holder_id?: string;
+  balance?: number;
+  bankName?: string;
+  accountNumber?: string;
+  type?: AccountType | string;
+  color?: string;
+  is_active?: boolean;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+/**
+ * Entidade: Transaction
+ */
+export interface Transaction {
+  id: string;
+  user_id?: string;
+  type: TransactionType | 'INCOME' | 'EXPENSE';
+  amount?: number;
+  value?: number;
+  description: string;
+  date: string | Date;
+  category_id?: string | null;
+  categoryId?: string | null;
+  category?: string | null;
+  account_id?: string | null;
+  accountId?: string | null;
+  member_id?: string | null;
+  memberId?: string | null;
+  installment_number?: number | null;
+  installmentNumber?: number | null;
+  currentInstallment?: number | null;
+  total_installments?: number;
+  installments?: number;
+  parent_transaction_id?: string | null;
+  is_recurring?: boolean;
+  isRecurring?: boolean;
+  recurring_transaction_id?: string | null;
+  status?: TransactionStatus | 'PENDING' | 'COMPLETED';
+  isPaid?: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+/**
+ * Entidade: RecurringTransaction
+ */
+export interface RecurringTransaction {
+  id: string;
+  user_id?: string;
+  type: 'INCOME' | 'EXPENSE';
+  amount: number;
+  description: string;
+  category_id?: string | null;
+  account_id?: string | null;
+  member_id?: string | null;
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  day_of_month?: number | null;
+  day_of_week?: number | null;
+  start_date: string;
+  end_date?: string | null;
+  is_active?: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Tipo de conta/bill
  */
 export type BillType = 'fixed' | 'card';
 
@@ -136,20 +234,87 @@ export type BillType = 'fixed' | 'card';
 export type BillStatus = 'pending' | 'paid';
 
 /**
- * Entidade: Bill (Conta a pagar)
- * Representa despesas pendentes que aparecem no widget "Próximas Despesas"
+ * Entidade: Bill
  */
 export interface Bill {
   id: string;
   description: string;
   value: number;
-  dueDate: Date;
-  type: BillType;
-  status: BillStatus;
-  accountId: string | null; // ID da conta/cartão de pagamento
-  isRecurring: boolean; // Se é conta recorrente mensal
-  installments?: number; // Número de parcelas (se parcelado)
-  currentInstallment?: number; // Parcela atual
-  createdAt: Date;
-  updatedAt: Date;
+  dueDay?: number;
+  dueDate?: Date | string;
+  type?: BillType;
+  status?: BillStatus;
+  accountId?: string | null;
+  isRecurring?: boolean;
+  isPaid?: boolean;
+  installments?: number;
+  currentInstallment?: number;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+/**
+ * Entidade: Goal
+ */
+export interface Goal {
+  id: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  targetAmount?: number;
+  currentAmount?: number;
+  category?: string;
+  deadline?: string | Date | null;
+  memberId?: string | null;
+  isActive?: boolean;
+  isCompleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+/**
+ * Helper type guard para verificar se é CreditCard
+ */
+export function isCreditCard(account: any): account is CreditCard {
+  return account?.type === 'CREDIT_CARD' || 
+    ('closingDay' in account || 'closing_day' in account) ||
+    ('creditLimit' in account || 'credit_limit' in account);
+}
+
+/**
+ * Helper type guard para verificar se é BankAccount
+ */
+export function isBankAccount(account: any): account is BankAccount {
+  return account?.type === 'CHECKING' || account?.type === 'SAVINGS' || 
+    ('balance' in account && !isCreditCard(account));
+}
+
+/**
+ * Função para formatar valor como moeda brasileira
+ */
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+}
+
+/**
+ * Função para formatar data
+ */
+export function formatDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('pt-BR').format(d);
+}
+
+/**
+ * Função para normalizar tipo de transação
+ */
+export function normalizeTransactionType(type: string): 'income' | 'expense' {
+  return type.toLowerCase() as 'income' | 'expense';
 }

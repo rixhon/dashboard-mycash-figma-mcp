@@ -247,13 +247,13 @@ export default function CardDetailsModal({
                         `}
                       >
                         <td className="px-4 py-3 text-[14px] text-gray-600">
-                          {formatDate(tx.date)}
+                          {formatDate(new Date(tx.date))}
                         </td>
                         <td className="px-4 py-3 text-[14px] font-medium text-[#080B12]">
                           {tx.description}
-                          {tx.installments > 1 && (
+                          {(tx.installments || tx.total_installments || 1) > 1 && (
                             <span className="text-gray-500 ml-1">
-                              ({tx.currentInstallment}/{tx.installments})
+                              ({tx.installmentNumber || tx.installment_number || 1}/{tx.installments || tx.total_installments})
                             </span>
                           )}
                         </td>

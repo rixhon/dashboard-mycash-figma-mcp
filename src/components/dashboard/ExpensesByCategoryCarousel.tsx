@@ -351,12 +351,12 @@ export default function ExpensesByCategoryCarousel() {
         {categories.map((category, index) => {
           // Usa calculateCategoryPercentage para obter o percentual relativo à receita
           // Se a receita for zero, retorna 0% (tratamento de divisão por zero)
-          const percentage = calculateCategoryPercentage(category.category)
+          const percentage = calculateCategoryPercentage(category.total)
           
           return (
             <CategoryDonutCard
-              key={category.category}
-              category={category.category}
+              key={category.categoryId || category.category}
+              category={category.categoryName || category.category || ''}
               total={category.total}
               percentage={percentage}
               colorIndex={index}
