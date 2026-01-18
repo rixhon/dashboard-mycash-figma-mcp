@@ -5,7 +5,7 @@
 - [x] PROMPT 1: Estrutura Base e Configuração
 - [x] PROMPT 2: Sistema de Layout e Navegação Desktop
 - [ ] PROMPT 3: Sistema de Layout e Navegação Mobile
-- [ ] PROMPT 4: Context Global e Gerenciamento de Estado
+- [x] PROMPT 4: Context Global e Gerenciamento de Estado
 - [ ] PROMPT 5: Cards de Resumo Financeiro
 - [ ] PROMPT 6: Header do Dashboard com Controles
 - [ ] PROMPT 7: Carrossel de Gastos por Categoria
@@ -82,6 +82,7 @@ src/
 ├── components/
 │   ├── layout/
 │   │   ├── Sidebar/
+│   │   │   └── Sidebar.tsx
 │   │   ├── Header/
 │   │   └── Layout.tsx
 │   ├── ui/
@@ -101,10 +102,14 @@ src/
 │       ├── CardsAndAccounts.tsx
 │       ├── UpcomingExpenses.tsx
 │       └── DetailedStatement.tsx
+├── contexts/
+│   ├── FinanceContext.tsx    ← PROMPT 4: Estado global
+│   └── index.ts
 ├── pages/
 │   ├── Dashboard.tsx
 │   ├── Cards.tsx
 │   ├── Transactions.tsx
+│   ├── Goals.tsx
 │   └── Profile.tsx
 ├── hooks/
 │   ├── useResponsive.ts
@@ -202,6 +207,10 @@ Tentativas: N/A | Erros: 0 | Status: Análise concluída
 Tentativas: 2 | Erros: 0 | Status: ✅ Sucesso
 **Commit**: `feat: estrutura base do projeto - PROMPT 1` (hash: c0b398f)
 
+### PROMPT 4
+Tentativas: 2 | Erros: 0 | Status: ✅ Sucesso
+**Erro corrigido**: `TS6133: 'TransactionType' is declared but its value is never read`
+
 ---
 
 ## PROMPT 2: Sistema de Layout e Navegação Desktop
@@ -266,3 +275,129 @@ Tentativas: 3 | Erros: 0 | Status: ✅ Sucesso
 - Tipografia: line-height ajustado para melhor legibilidade
 - Acessibilidade: focus states no botão de alternância
 - Animações: hover effects e transições suaves em todos os elementos
+
+---
+
+## PROMPT 4: Context Global e Gerenciamento de Estado
+Status: ✅ | Data: 2025-01-18 | Build: ✅ (2 tentativas)
+
+### Implementado
+- FinanceProvider como contexto principal no nível mais alto da aplicação
+- Estado global com 5 arrays principais tipados (transactions, goals, creditCards, bankAccounts, familyMembers)
+- Funções CRUD completas para todas as entidades
+- Sistema de filtros globais (selectedMember, dateRange, transactionType, searchText)
+- Funções de cálculo derivadas com aplicação automática de filtros
+- Hook customizado useFinance como único ponto de acesso ao contexto
+- Dados mock realistas para desenvolvimento
+
+### Estado Principal
+```typescript
+// Arrays principais
+transactions: Transaction[]
+goals: Goal[]
+creditCards: CreditCard[]
+bankAccounts: BankAccount[]
+familyMembers: FamilyMember[]
+
+// Filtros globais
+filters: {
+  selectedMember: string | null
+  dateRange: { startDate: Date, endDate: Date }
+  transactionType: 'all' | 'income' | 'expense'
+  searchText: string
+}
+```
+
+### Funções CRUD
+- `addTransaction`, `updateTransaction`, `deleteTransaction`
+- `addGoal`, `updateGoal`, `deleteGoal`
+- `addCreditCard`, `updateCreditCard`, `deleteCreditCard`
+- `addBankAccount`, `updateBankAccount`, `deleteBankAccount`
+- `addFamilyMember`, `updateFamilyMember`, `deleteFamilyMember`
+
+### Funções de Filtro
+- `setSelectedMember(memberId: string | null)` - Filtra por membro
+- `setDateRange(range: DateRange)` - Define período
+- `setTransactionType(type: TransactionFilterType)` - Filtra por tipo
+- `setSearchText(text: string)` - Busca textual
+- `resetFilters()` - Reseta todos os filtros
+
+### Cálculos Derivados
+- `getFilteredTransactions()` - Transações após aplicar todos os filtros
+- `calculateTotalBalance()` - Soma saldos de contas - faturas de cartões
+- `calculateIncomeForPeriod()` - Soma receitas do período filtrado
+- `calculateExpensesForPeriod()` - Soma despesas do período filtrado
+- `calculateExpensesByCategory()` - Despesas agrupadas por categoria (ordenadas por valor)
+- `calculateCategoryPercentage(category)` - % da categoria vs receita total
+- `calculateSavingsRate()` - Taxa de economia: (receitas - despesas) / receitas × 100
+
+### Helpers
+- `getMemberById(id)` - Busca membro por ID
+- `getAccountById(id)` - Busca conta/cartão por ID
+
+### Dados Mock
+**Família Brasileira (3 membros):**
+- Lucas Martins (Pai) - Renda: R$ 12.000
+- Ana Martins (Mãe) - Renda: R$ 8.000
+- Pedro Martins (Filho) - Renda: R$ 2.500
+
+**Cartões de Crédito (3):**
+- Nubank (Lucas) - Limite: R$ 15.000
+- Inter (Ana) - Limite: R$ 10.000
+- Picpay (Pedro) - Limite: R$ 5.000
+
+**Contas Bancárias (3):**
+- Nubank Conta (Lucas) - Saldo: R$ 8.500
+- Inter Conta (Ana) - Saldo: R$ 4.200
+- Picpay Conta (Pedro) - Saldo: R$ 1.800
+
+**Objetivos (4):**
+- Reserva de Emergência - Meta: R$ 60.000 / Atual: R$ 25.000
+- Viagem para Europa - Meta: R$ 35.000 / Atual: R$ 12.000
+- Notebook Novo - Meta: R$ 15.000 / Atual: R$ 8.500
+- Curso de Inglês - Meta: R$ 5.000 / Atual: R$ 2.000
+
+**Transações (30):**
+- Distribuídas nos últimos 3 meses
+- Categorias brasileiras: Salário, Freelance, Aluguel, Alimentação, Mercado, Transporte, Saúde, Educação, Lazer, Assinaturas, Academia, Manutenção, Vestuário, Pets
+
+### Categorias Padrão
+```typescript
+const CATEGORIES = {
+  income: ['Salário', 'Freelance', 'Investimentos', 'Outros'],
+  expense: [
+    'Aluguel', 'Alimentação', 'Mercado', 'Transporte', 'Saúde',
+    'Educação', 'Lazer', 'Vestuário', 'Manutenção', 'Assinaturas',
+    'Academia', 'Pets', 'Outros'
+  ]
+}
+```
+
+### Arquivos
+- `src/contexts/FinanceContext.tsx` - Provider, estado, CRUD, filtros, cálculos
+- `src/contexts/index.ts` - Exportações centralizadas
+- `src/App.tsx` - Integração do FinanceProvider
+
+### Uso
+```typescript
+import { useFinance } from '@/contexts'
+
+function MyComponent() {
+  const {
+    transactions,
+    addTransaction,
+    calculateTotalBalance,
+    filters,
+    setSelectedMember
+  } = useFinance()
+  
+  // ...
+}
+```
+
+### Notas Importantes
+⚠️ **SEM localStorage/sessionStorage** - Todo estado é mantido em memória via React state (useState). Dados são perdidos ao recarregar a página. Futuramente será integrado com Supabase para persistência real.
+
+### Build
+Tentativas: 2 | Erros: 0 | Status: ✅ Sucesso
+- Erro corrigido: import não utilizado (TransactionType)

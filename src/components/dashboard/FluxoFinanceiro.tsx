@@ -1,31 +1,195 @@
 /**
- * Componente: FluxoFinanceiro
- * Gráfico de fluxo financeiro mensal com receitas e despesas
- * Conforme design Figma node 42-3123
+ * Componente: FluxoFinanceiro (FinancialFlowChart)
+ * Gráfico de área (area chart) mostrando evolução de receitas e despesas
+ * Implementado com Recharts para gráficos responsivos e interativos
+ * 
+ * Conforme documentação:
+ * - Header com título "Fluxo Financeiro" e ícone de gráfico crescente
+ * - Legenda horizontal: círculo verde-limão "Receitas", círculo preto "Despesas"
+ * - Gráfico de área com altura fixa de 300px, largura responsiva (100%)
+ * - Fundo cinza claro muito suave
+ * - Eixo X: nomes dos meses abreviados (Jan, Fev, Mar...)
+ * - Eixo Y: valores compactos (R$ 2k, R$ 4k...)
+ * - Linhas de grid horizontais tracejadas sutis (cinza claríssimo)
+ * - Tooltip interativo com linha vertical e valores formatados
+ * - Dados dinâmicos do contexto global (transações agrupadas por mês)
  */
 
-// Ícone de gráfico de barras - conforme Figma
+import { useMemo } from 'react'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
+import { useFinance } from '@/contexts/FinanceContext'
+
+// ============================================================================
+// TIPOS
+// ============================================================================
+
+interface MonthlyData {
+  month: string
+  income: number
+  expense: number
+}
+
+// ============================================================================
+// ÍCONE
+// ============================================================================
+
+// Ícone de gráfico crescente - conforme documentação
 const ChartIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M3 3V21H21V19H5V3H3Z" />
-    <path d="M7 14H9V18H7V14Z" />
-    <path d="M11 10H13V18H11V10Z" />
-    <path d="M15 6H17V18H15V6Z" />
-    <path d="M19 12H21V18H19V12Z" />
+    <path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" />
   </svg>
 )
 
-const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
-const yAxisLabels = ['R$ 17.500', 'R$ 15.000', 'R$ 12.500', 'R$ 10.000', 'R$ 7.500', 'R$ 5.000', 'R$ 2.500', 'R$ 0,00']
+// ============================================================================
+// CONSTANTES
+// ============================================================================
 
-// SVG paths para o gráfico - curvas suaves conforme Figma
-// Receitas: começa baixo, sobe até MAR-ABR, desce em JUN, sobe novamente até DEZ
-const receitasPath = "M0,260 C20,250 40,220 80,150 C120,80 160,60 200,70 C240,80 280,90 320,100 C360,110 400,130 440,140 C480,150 520,130 560,100 C600,70 620,30 625,20"
+// Meses abreviados para o eixo X
+const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul']
 
-// Despesas: começa baixo, sobe gradualmente, pico em JUN, desce e sobe no final
-const despesasPath = "M0,260 C20,255 40,240 80,200 C120,160 160,140 200,150 C240,160 280,130 320,120 C360,110 400,140 440,160 C480,180 520,200 560,180 C600,160 620,140 625,130"
+// Altura fixa do gráfico
+const CHART_HEIGHT = 300
+
+// Cores do design system
+const COLORS = {
+  income: '#C4E703',      // verde-limão
+  expense: '#080B12',     // preto
+  grid: '#E5E7EB',        // cinza claríssimo
+  axisText: '#9CA3AF',    // cinza médio
+  incomeText: '#166534',  // verde escuro para tooltip
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Formata valor monetário de forma compacta para eixo Y
+ * Ex: 2000 -> "R$ 2k", 10000 -> "R$ 10k"
+ */
+function formatCompactCurrency(value: number): string {
+  if (value >= 1000) {
+    return `R$ ${(value / 1000).toFixed(0)}k`
+  }
+  return `R$ ${value}`
+}
+
+/**
+ * Formata valor monetário completo para tooltip
+ * Ex: 12500 -> "R$ 12.500,00"
+ */
+function formatFullCurrency(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
+// ============================================================================
+// COMPONENTE: CustomTooltip
+// ============================================================================
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: Array<{
+    dataKey: string
+    value: number
+    color: string
+  }>
+  label?: string
+}
+
+/**
+ * Tooltip customizado com fundo branco, sombra e valores formatados
+ */
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) {
+    return null
+  }
+
+  const incomeValue = payload.find((p) => p.dataKey === 'income')?.value ?? 0
+  const expenseValue = payload.find((p) => p.dataKey === 'expense')?.value ?? 0
+
+  return (
+    <div 
+      className="
+        bg-white 
+        rounded-lg 
+        shadow-xl 
+        border border-gray-100
+        p-3
+        min-w-[160px]
+      "
+    >
+      {/* Nome do mês em negrito */}
+      <p className="text-[14px] font-bold text-gray-900 mb-2">
+        {label}
+      </p>
+      
+      {/* Receitas em verde escuro */}
+      <p className="text-[13px] text-[#166534] mb-1">
+        Receitas: {formatFullCurrency(incomeValue)}
+      </p>
+      
+      {/* Despesas em preto */}
+      <p className="text-[13px] text-gray-900">
+        Despesas: {formatFullCurrency(expenseValue)}
+      </p>
+    </div>
+  )
+}
+
+// ============================================================================
+// COMPONENTE PRINCIPAL
+// ============================================================================
 
 export default function FluxoFinanceiro() {
+  const { transactions } = useFinance()
+  
+  // Calcula dados mensais dos últimos 7 meses a partir das transações reais
+  const monthlyData = useMemo((): MonthlyData[] => {
+    const now = new Date()
+    const data: MonthlyData[] = []
+    
+    // Gera dados para os últimos 7 meses
+    for (let i = 6; i >= 0; i--) {
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
+      const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
+      
+      // Filtra transações do mês
+      const monthTransactions = transactions.filter(tx => {
+        const txDate = new Date(tx.date)
+        return txDate >= monthStart && txDate <= monthEnd && tx.status === 'completed'
+      })
+      
+      // Soma receitas e despesas
+      const income = monthTransactions
+        .filter(tx => tx.type === 'income')
+        .reduce((sum, tx) => sum + tx.value, 0)
+      
+      const expense = monthTransactions
+        .filter(tx => tx.type === 'expense')
+        .reduce((sum, tx) => sum + tx.value, 0)
+      
+      data.push({
+        month: MONTHS_SHORT[6 - i] || MONTHS_SHORT[targetDate.getMonth()],
+        income,
+        expense,
+      })
+    }
+    
+    return data
+  }, [transactions])
+
   return (
     <div
       className="
@@ -36,107 +200,140 @@ export default function FluxoFinanceiro() {
         min-w-0
       "
     >
-      <div className="flex flex-col gap-[32px] p-[32px] h-full">
+      <div className="flex flex-col gap-[24px] p-[24px] lg:p-[32px] h-full">
         {/* Header */}
         <div className="flex flex-col gap-[16px] sm:flex-row sm:items-center sm:justify-between">
+          {/* Título com ícone de gráfico crescente */}
           <div className="flex gap-[8px] items-center">
-            <ChartIcon />
-            <h3 className="text-[20px] font-bold leading-[28px] text-text-primary">
-              Fluxo financeiro
+            <span className="text-text-primary">
+              <ChartIcon />
+            </span>
+            <h3 className="text-[18px] lg:text-[20px] font-bold leading-[28px] text-text-primary">
+              Fluxo Financeiro
             </h3>
           </div>
           
-          {/* Legenda */}
-          <div className="flex gap-[8px] items-center">
+          {/* Legenda horizontal */}
+          <div className="flex gap-[16px] items-center">
+            {/* Receitas - círculo verde-limão */}
             <div className="flex gap-[8px] items-center">
-              <div className="w-[9px] h-[9px] rounded-full bg-[#C4E703]" />
-              <span className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-text-primary">
+              <div className="w-[10px] h-[10px] rounded-full bg-[#C4E703]" />
+              <span className="text-[12px] font-medium leading-[16px] text-gray-500">
                 Receitas
               </span>
             </div>
+            {/* Despesas - círculo preto */}
             <div className="flex gap-[8px] items-center">
-              <div className="w-[9px] h-[9px] rounded-full bg-[#E61E32]" />
-              <span className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-text-primary">
+              <div className="w-[10px] h-[10px] rounded-full bg-[#080B12]" />
+              <span className="text-[12px] font-medium leading-[16px] text-gray-500">
                 Despesas
               </span>
             </div>
           </div>
         </div>
 
-        {/* Gráfico */}
-        <div className="flex gap-[5px] items-end flex-1 min-h-[200px] lg:min-h-[280px]">
-          {/* Eixo Y - Labels */}
-          <div className="flex flex-col justify-between h-full shrink-0">
-            {yAxisLabels.map((label, index) => (
-              <span
-                key={index}
-                className="text-[12px] lg:text-[18px] font-normal leading-[20px] lg:leading-[28px] tracking-[0.3px] text-text-primary whitespace-nowrap"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-
-          {/* Área do gráfico */}
-          <div className="flex-1 h-full relative overflow-hidden">
-            <svg
-              className="w-full h-full"
-              viewBox="0 0 625 280"
-              preserveAspectRatio="none"
+        {/* Área do Gráfico - Recharts ResponsiveContainer */}
+        <div 
+          className="w-full bg-gray-50 rounded-lg overflow-hidden"
+          style={{ height: CHART_HEIGHT }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={monthlyData}
+              margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
             >
-              {/* Gradientes */}
+              {/* Definições de gradientes */}
               <defs>
-                <linearGradient id="receitasGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#EDFF8B" stopOpacity="0.87" />
-                  <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+                {/* Gradiente para área de receitas (verde-limão 30% opaco no topo) */}
+                <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.income} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={COLORS.income} stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="despesasGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#EB4B5B" stopOpacity="0.51" />
-                  <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+                {/* Gradiente para área de despesas (preto 10% opaco no topo) */}
+                <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.expense} stopOpacity={0.1} />
+                  <stop offset="100%" stopColor={COLORS.expense} stopOpacity={0} />
                 </linearGradient>
               </defs>
 
-              {/* Área preenchida receitas (verde-limão) */}
-              <path
-                d={`${receitasPath} L625,280 L0,280 Z`}
-                fill="url(#receitasGradient)"
+              {/* Grid horizontal tracejado sutil */}
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke={COLORS.grid}
+                strokeOpacity={0.6}
+                vertical={false}
               />
 
-              {/* Área preenchida despesas (vermelho) */}
-              <path
-                d={`${despesasPath} L625,280 L0,280 Z`}
-                fill="url(#despesasGradient)"
+              {/* Eixo X - Meses abreviados */}
+              <XAxis 
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
+                tick={{ 
+                  fill: COLORS.axisText, 
+                  fontSize: 12,
+                  fontWeight: 400,
+                }}
+                dy={10}
               />
 
-              {/* Linha de receitas */}
-              <path
-                d={receitasPath}
-                fill="none"
-                stroke="#C4E703"
-                strokeWidth="2"
+              {/* Eixo Y - Valores compactos */}
+              <YAxis 
+                axisLine={false}
+                tickLine={false}
+                tick={{ 
+                  fill: COLORS.axisText, 
+                  fontSize: 12,
+                  fontWeight: 400,
+                }}
+                tickFormatter={formatCompactCurrency}
+                dx={-5}
+                width={60}
               />
 
-              {/* Linha de despesas */}
-              <path
-                d={despesasPath}
-                fill="none"
-                stroke="#E61E32"
-                strokeWidth="2"
+              {/* Tooltip interativo com linha vertical */}
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ 
+                  stroke: COLORS.grid, 
+                  strokeWidth: 1,
+                  strokeDasharray: '4 4',
+                }}
               />
-            </svg>
-          </div>
-        </div>
 
-        {/* Eixo X - Meses */}
-        <div className="flex justify-between gap-[8px] lg:gap-[20px] overflow-x-auto">
-          {months.map((month) => (
-            <span
-              key={month}
-              className="text-[12px] lg:text-[14px] font-semibold leading-[16px] lg:leading-[20px] tracking-[0.3px] text-text-primary whitespace-nowrap"
-            >
-              {month}
-            </span>
-          ))}
+              {/* Área de Receitas - verde-limão, linha 3px, curva suave */}
+              <Area
+                type="monotone"
+                dataKey="income"
+                stroke={COLORS.income}
+                strokeWidth={3}
+                fill="url(#incomeGradient)"
+                dot={false}
+                activeDot={{ 
+                  r: 6, 
+                  fill: COLORS.income,
+                  stroke: '#fff',
+                  strokeWidth: 2,
+                }}
+              />
+
+              {/* Área de Despesas - preto, linha 3px, curva suave */}
+              <Area
+                type="monotone"
+                dataKey="expense"
+                stroke={COLORS.expense}
+                strokeWidth={3}
+                fill="url(#expenseGradient)"
+                dot={false}
+                activeDot={{ 
+                  r: 6, 
+                  fill: COLORS.expense,
+                  stroke: '#fff',
+                  strokeWidth: 2,
+                }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

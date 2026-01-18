@@ -6,17 +6,23 @@
  * - Mobile: 1 coluna, cards empilhados
  * - Tablet: 2 colunas quando faz sentido
  * - Desktop: Layout completo conforme Figma
+ * 
+ * Dados dinâmicos:
+ * - Todos os valores são calculados a partir do contexto global
+ * - Respeitam filtros de período, membro e tipo de transação
  */
 
 import {
   Navbar,
-  ExpenseCard,
   SummaryCard,
+  ExpensesByCategoryCarousel,
   CardsContas,
   FluxoFinanceiro,
   ProximasDespesas,
   ExtratoDetalhado,
 } from '@/components/dashboard'
+import { useFinance } from '@/contexts/FinanceContext'
+import { formatCurrency } from '@/utils/formatters'
 
 // Ícone de cifrão ($) para Saldo total - conforme Figma
 const DollarIcon = ({ color }: { color: string }) => (
@@ -39,15 +45,19 @@ const ArrowUpIcon = ({ color }: { color: string }) => (
   </svg>
 )
 
-// Dados mockados para os expense cards
-const expenseCardsData = [
-  { percentage: 25, title: 'Aluguel', value: 'R$ 4.000,00' },
-  { percentage: 15, title: 'Alimentação', value: 'R$ 2.000,00' },
-  { percentage: 5, title: 'Mercado', value: 'R$ 1.500,00' },
-  { percentage: 3, title: 'Academia', value: 'R$ 120,00' },
-]
-
 export default function Dashboard() {
+  // Dados do contexto global - respeitam todos os filtros ativos
+  const {
+    calculateTotalBalance,
+    calculateIncomeForPeriod,
+    calculateExpensesForPeriod,
+  } = useFinance()
+
+  // Valores calculados dinamicamente
+  const totalBalance = calculateTotalBalance()
+  const totalIncome = calculateIncomeForPeriod()
+  const totalExpenses = calculateExpensesForPeriod()
+
   return (
     <div className="w-full min-h-screen bg-background-secondary overflow-x-hidden">
       {/* Container principal com padding e gap de 32px conforme Figma */}
@@ -59,36 +69,29 @@ export default function Dashboard() {
         <div className="flex flex-col lg:flex-row gap-[32px] w-full">
           {/* Coluna esquerda - Expense cards e Summary cards */}
           <div className="flex flex-col gap-[30px] w-full lg:flex-[1.5] min-w-0">
-            {/* Expense Cards - Grid responsivo com gap de 18px */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-[16px] lg:gap-[18px]">
-              {expenseCardsData.map((card, index) => (
-                <ExpenseCard
-                  key={index}
-                  percentage={card.percentage}
-                  title={card.title}
-                  value={card.value}
-                />
-              ))}
-            </div>
+            {/* Carrossel de Gastos por Categoria */}
+            {/* Widget com gráficos donut, scrollável horizontalmente */}
+            <ExpensesByCategoryCarousel />
 
             {/* Summary Cards com gap de 20px */}
+            {/* Valores calculados dinamicamente do contexto */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] lg:gap-[20px]">
               <SummaryCard
                 icon={<DollarIcon color="#2A89EF" />}
                 title="Saldo total"
-                value="R$ 2.000,00"
+                value={formatCurrency(totalBalance)}
                 valueColor="blue"
               />
               <SummaryCard
                 icon={<ArrowDownIcon color="#15BE78" />}
                 title="Receitas"
-                value="R$12.000,00"
+                value={formatCurrency(totalIncome)}
                 valueColor="green"
               />
               <SummaryCard
                 icon={<ArrowUpIcon color="#E61E32" />}
                 title="Despesas"
-                value="R$ 10.000,00"
+                value={formatCurrency(totalExpenses)}
                 valueColor="red"
               />
             </div>
