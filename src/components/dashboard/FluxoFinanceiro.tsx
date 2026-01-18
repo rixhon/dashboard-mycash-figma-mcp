@@ -198,9 +198,11 @@ export default function FluxoFinanceiro() {
         border border-border-light
         w-full
         min-w-0
+        flex-1
+        flex flex-col
       "
     >
-      <div className="flex flex-col gap-[24px] p-[24px] lg:p-[32px] h-full">
+      <div className="flex flex-col gap-[24px] p-[24px] lg:p-[32px] flex-1">
         {/* Header */}
         <div className="flex flex-col gap-[16px] sm:flex-row sm:items-center sm:justify-between">
           {/* Título com ícone de gráfico crescente */}
@@ -233,9 +235,10 @@ export default function FluxoFinanceiro() {
         </div>
 
         {/* Área do Gráfico - Recharts ResponsiveContainer */}
+        {/* flex-1 para expandir e preencher altura disponível, min-height para garantir legibilidade */}
         <div 
-          className="w-full bg-gray-50 rounded-lg overflow-hidden"
-          style={{ height: CHART_HEIGHT }}
+          className="w-full bg-gray-50 rounded-lg overflow-hidden flex-1"
+          style={{ minHeight: CHART_HEIGHT }}
         >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart

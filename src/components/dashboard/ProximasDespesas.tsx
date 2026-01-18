@@ -4,6 +4,7 @@
  * 
  * Funcionalidades:
  * - Exibe lista cronológica de despesas pendentes (ordenadas por vencimento)
+ * - Mostra apenas 5 contas visíveis com carrossel vertical para o restante
  * - Mostra: descrição, data de vencimento, conta/cartão de pagamento, valor
  * - Botão de adicionar nova despesa (abre modal de transação)
  * - Botão de marcar como paga com animação:
@@ -16,7 +17,7 @@
  * - Estado vazio com borda tracejada quando não há pendências
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useFinance } from '@/contexts/FinanceContext'
 import { Bill } from '@/types'
 
@@ -242,6 +243,13 @@ function Toast({ message, isVisible }: ToastProps) {
 }
 
 // ============================================================================
+// CONSTANTES
+// ============================================================================
+
+const VISIBLE_ITEMS = 5
+const ITEM_HEIGHT = 88 // Altura aproximada de cada item em pixels
+
+// ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
 
@@ -259,8 +267,14 @@ export default function ProximasDespesas() {
   // Estado para toast de confirmação
   const [showToast, setShowToast] = useState(false)
 
+  // Ref para o container scrollável
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
   // Obtém bills pendentes ordenadas por vencimento
   const pendingBills = getPendingBills()
+
+  // Verifica se precisa de scroll (mais de 5 itens)
+  const needsScroll = pendingBills.length > VISIBLE_ITEMS
 
   // Handler de adicionar despesa
   const handleAddBill = useCallback(() => {
@@ -297,9 +311,11 @@ export default function ProximasDespesas() {
           border border-border-light
           w-full
           min-w-0
+          flex-1
+          flex flex-col
         "
       >
-        <div className="flex flex-col gap-[24px] p-[32px]">
+        <div className="flex flex-col gap-[24px] p-[32px] flex-1">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex gap-[8px] items-center">
@@ -333,19 +349,50 @@ export default function ProximasDespesas() {
 
           {/* Lista de despesas ou estado vazio */}
           {pendingBills.length > 0 ? (
-            <div className="flex flex-col">
-              {pendingBills.map((bill) => (
-                <DespesaItemCard
-                  key={bill.id}
-                  bill={bill}
-                  paymentMethod={getPaymentMethodName(bill.accountId, creditCards, bankAccounts)}
-                  onMarkAsPaid={() => handleMarkAsPaid(bill.id)}
-                  isRemoving={removingIds.has(bill.id)}
+            <div className="relative">
+              {/* Container scrollável com altura máxima para 5 itens */}
+              <div
+                ref={scrollContainerRef}
+                className={`
+                  flex flex-col
+                  ${needsScroll ? 'overflow-y-auto scrollbar-hide' : ''}
+                `}
+                style={{
+                  maxHeight: needsScroll ? `${VISIBLE_ITEMS * ITEM_HEIGHT}px` : 'auto',
+                }}
+              >
+                {pendingBills.map((bill) => (
+                  <DespesaItemCard
+                    key={bill.id}
+                    bill={bill}
+                    paymentMethod={getPaymentMethodName(bill.accountId, creditCards, bankAccounts)}
+                    onMarkAsPaid={() => handleMarkAsPaid(bill.id)}
+                    isRemoving={removingIds.has(bill.id)}
+                  />
+                ))}
+              </div>
+
+              {/* Indicador de scroll (gradiente na parte inferior) */}
+              {needsScroll && (
+                <div 
+                  className="
+                    absolute bottom-0 left-0 right-0 
+                    h-8 
+                    bg-gradient-to-t from-white to-transparent
+                    pointer-events-none
+                  "
                 />
-              ))}
+              )}
             </div>
           ) : (
             <EmptyState />
+          )}
+
+          {/* Indicador de quantidade total */}
+          {pendingBills.length > VISIBLE_ITEMS && (
+            <p className="text-[12px] text-gray-400 text-center">
+              Mostrando {VISIBLE_ITEMS} de {pendingBills.length} despesas • Role para ver mais
+            </p>
           )}
         </div>
       </div>

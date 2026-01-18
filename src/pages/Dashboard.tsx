@@ -67,7 +67,8 @@ export default function Dashboard() {
         <Navbar />
 
         {/* Frame 34 - Seção superior */}
-        <div className="flex flex-col lg:flex-row gap-[32px] w-full">
+        {/* items-end alinha as bases dos cards no desktop */}
+        <div className="flex flex-col lg:flex-row lg:items-end gap-[32px] w-full">
           {/* Coluna esquerda - Expense cards e Summary cards */}
           <div className="flex flex-col gap-[30px] w-full lg:flex-[1.5] min-w-0">
             {/* Carrossel de Gastos por Categoria */}
@@ -103,14 +104,15 @@ export default function Dashboard() {
         </div>
 
         {/* Frame 35 - Seção do meio com gap de 32px */}
-        <div className="flex flex-col lg:flex-row gap-[32px] w-full">
-          {/* Fluxo Financeiro */}
-          <div className="w-full lg:flex-[1.5] min-w-0">
+        {/* items-stretch garante que ambos os cards tenham a mesma altura */}
+        <div className="flex flex-col lg:flex-row lg:items-stretch gap-[32px] w-full">
+          {/* Fluxo Financeiro - flex-1 para expandir e preencher altura */}
+          <div className="w-full lg:flex-[1.5] min-w-0 flex">
             <FluxoFinanceiro />
           </div>
 
           {/* Próximas Despesas */}
-          <div className="w-full lg:flex-1 min-w-0">
+          <div className="w-full lg:flex-1 min-w-0 flex">
             <ProximasDespesas />
           </div>
         </div>
