@@ -13,6 +13,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useFinance } from '@/contexts/FinanceContext'
+import { NewTransactionModal, AddMemberModal, FiltersMobileModal } from '@/components/modals'
 
 // ============================================================================
 // ÍCONES
@@ -630,6 +631,11 @@ export default function Navbar() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Estados dos modais
+  const [showTransactionModal, setShowTransactionModal] = useState(false)
+  const [showMemberModal, setShowMemberModal] = useState(false)
+  const [showFiltersMobileModal, setShowFiltersMobileModal] = useState(false)
 
   const filterButtonRef = useRef<HTMLButtonElement>(null)
   const dateButtonRef = useRef<HTMLButtonElement>(null)
@@ -808,9 +814,9 @@ export default function Navbar() {
                     )}
                   </div>
 
-                  {/* Tooltip com nome e função - aparece no hover */}
+                  {/* Tooltip com nome e função - aparece no hover (abaixo do avatar) */}
                   <div className="
-                    absolute bottom-full left-1/2 -translate-x-1/2 mb-[8px]
+                    absolute top-full left-1/2 -translate-x-1/2 mt-[8px]
                     px-[12px] py-[6px]
                     bg-[#080B12] text-white
                     text-[12px] font-medium
@@ -823,10 +829,10 @@ export default function Navbar() {
                   ">
                     <span className="font-semibold">{member.name}</span>
                     <span className="text-gray-400"> - {member.role}</span>
-                    {/* Seta do tooltip */}
+                    {/* Seta do tooltip apontando para cima */}
                     <div className="
-                      absolute top-full left-1/2 -translate-x-1/2
-                      border-[6px] border-transparent border-t-[#080B12]
+                      absolute bottom-full left-1/2 -translate-x-1/2
+                      border-[6px] border-transparent border-b-[#080B12]
                     " />
                   </div>
 
@@ -843,6 +849,7 @@ export default function Navbar() {
 
           {/* Botão adicionar membro */}
           <button
+            onClick={() => setShowMemberModal(true)}
             className="
               w-[44px] h-[44px]
               rounded-full
@@ -865,6 +872,7 @@ export default function Navbar() {
 
       {/* Lado direito - Botão nova transação */}
       <button
+        onClick={() => setShowTransactionModal(true)}
         className="
           flex gap-[8px] items-center justify-center
           px-[16px] py-[12px]
@@ -883,6 +891,22 @@ export default function Navbar() {
         </svg>
         <span className="text-[18px] font-semibold leading-[24px] tracking-[0.3px]">Nova transação</span>
       </button>
+
+      {/* Modais */}
+      <NewTransactionModal
+        isOpen={showTransactionModal}
+        onClose={() => setShowTransactionModal(false)}
+      />
+      
+      <AddMemberModal
+        isOpen={showMemberModal}
+        onClose={() => setShowMemberModal(false)}
+      />
+      
+      <FiltersMobileModal
+        isOpen={showFiltersMobileModal}
+        onClose={() => setShowFiltersMobileModal(false)}
+      />
     </nav>
   )
 }

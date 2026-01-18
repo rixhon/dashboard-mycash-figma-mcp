@@ -12,9 +12,11 @@
  * - Botão de adicionar novo cartão
  */
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useFinance } from '@/contexts/FinanceContext'
 import { CreditCard } from '@/types'
+import { AddCardModal, CardDetailsModal } from '@/components/modals'
+import { useNavigate } from 'react-router-dom'
 
 // ============================================================================
 // ÍCONES
@@ -157,24 +159,28 @@ function CardItem({ card, onClick }: CardItemProps) {
 
 export default function CardsContas() {
   const { creditCards } = useFinance()
+  const navigate = useNavigate()
+
+  // Estados dos modais
+  const [showAddCardModal, setShowAddCardModal] = useState(false)
+  const [showCardDetailsModal, setShowCardDetailsModal] = useState(false)
+  const [selectedCard, setSelectedCard] = useState<CreditCard | null>(null)
 
   // Handler de clique no cartão
   const handleCardClick = useCallback((card: CreditCard) => {
-    // TODO: Abrir modal de detalhes do cartão
-    console.log('Card clicked:', card)
+    setSelectedCard(card)
+    setShowCardDetailsModal(true)
   }, [])
 
   // Handler de adicionar cartão
   const handleAddCard = useCallback(() => {
-    // TODO: Abrir modal de criação de cartão
-    console.log('Add card clicked')
+    setShowAddCardModal(true)
   }, [])
 
   // Handler de ver todos
   const handleViewAll = useCallback(() => {
-    // TODO: Navegar para página de cartões
-    console.log('View all clicked')
-  }, [])
+    navigate('/cards')
+  }, [navigate])
 
   return (
     <div
@@ -246,6 +252,28 @@ export default function CardsContas() {
           )}
         </div>
       </div>
+
+      {/* Modal de adicionar cartão */}
+      <AddCardModal
+        isOpen={showAddCardModal}
+        onClose={() => setShowAddCardModal(false)}
+        initialType="creditCard"
+      />
+
+      {/* Modal de detalhes do cartão */}
+      <CardDetailsModal
+        isOpen={showCardDetailsModal}
+        onClose={() => setShowCardDetailsModal(false)}
+        card={selectedCard}
+        onAddExpense={() => {
+          setShowCardDetailsModal(false)
+          // Poderia abrir modal de nova transação aqui
+        }}
+        onEditCard={() => {
+          setShowCardDetailsModal(false)
+          setShowAddCardModal(true)
+        }}
+      />
     </div>
   )
 }

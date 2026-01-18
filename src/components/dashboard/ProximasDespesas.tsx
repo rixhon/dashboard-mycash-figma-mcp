@@ -20,6 +20,7 @@
 import { useCallback, useState, useRef } from 'react'
 import { useFinance } from '@/contexts/FinanceContext'
 import { Bill } from '@/types'
+import { AddBillModal } from '@/components/modals'
 
 // ============================================================================
 // ÍCONES
@@ -267,6 +268,9 @@ export default function ProximasDespesas() {
   // Estado para toast de confirmação
   const [showToast, setShowToast] = useState(false)
 
+  // Estado para modal de adicionar despesa
+  const [showAddBillModal, setShowAddBillModal] = useState(false)
+
   // Ref para o container scrollável
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -278,8 +282,7 @@ export default function ProximasDespesas() {
 
   // Handler de adicionar despesa
   const handleAddBill = useCallback(() => {
-    // TODO: Abrir modal de criação de despesa/transação
-    console.log('Add bill clicked - Abrir modal de nova transação')
+    setShowAddBillModal(true)
   }, [])
 
   // Handler de marcar como paga
@@ -399,6 +402,12 @@ export default function ProximasDespesas() {
 
       {/* Toast de confirmação */}
       <Toast message="Despesa marcada como paga!" isVisible={showToast} />
+
+      {/* Modal de adicionar despesa */}
+      <AddBillModal
+        isOpen={showAddBillModal}
+        onClose={() => setShowAddBillModal(false)}
+      />
     </>
   )
 }
