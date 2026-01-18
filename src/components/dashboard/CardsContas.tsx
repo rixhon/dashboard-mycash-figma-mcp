@@ -122,7 +122,7 @@ export default function CardsContas() {
         bg-background-primary
         rounded-[20px]
         border border-border-light
-        w-full xl:flex-1
+        w-full lg:flex-1
         min-w-0
       "
     >

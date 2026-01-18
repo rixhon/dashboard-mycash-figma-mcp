@@ -56,9 +56,9 @@ export default function Dashboard() {
         <Navbar />
 
         {/* Frame 34 - Seção superior */}
-        <div className="flex flex-col xl:flex-row gap-[32px] w-full">
+        <div className="flex flex-col lg:flex-row gap-[32px] w-full">
           {/* Coluna esquerda - Expense cards e Summary cards */}
-          <div className="flex flex-col gap-[30px] w-full xl:w-[60%] min-w-0">
+          <div className="flex flex-col gap-[30px] w-full lg:flex-[1.5] min-w-0">
             {/* Expense Cards - Grid responsivo com gap de 18px */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-[16px] lg:gap-[18px]">
               {expenseCardsData.map((card, index) => (
@@ -99,14 +99,14 @@ export default function Dashboard() {
         </div>
 
         {/* Frame 35 - Seção do meio com gap de 32px */}
-        <div className="flex flex-col xl:flex-row gap-[32px] w-full">
+        <div className="flex flex-col lg:flex-row gap-[32px] w-full">
           {/* Fluxo Financeiro */}
-          <div className="w-full xl:w-[60%] min-w-0">
+          <div className="w-full lg:flex-[1.5] min-w-0">
             <FluxoFinanceiro />
           </div>
 
           {/* Próximas Despesas */}
-          <div className="w-full xl:flex-1 min-w-0">
+          <div className="w-full lg:flex-1 min-w-0">
             <ProximasDespesas />
           </div>
         </div>
