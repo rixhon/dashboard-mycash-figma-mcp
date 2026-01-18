@@ -3,7 +3,7 @@
 ## Progresso
 - [x] PROMPT 0: Análise e Planejamento Inicial
 - [x] PROMPT 1: Estrutura Base e Configuração
-- [ ] PROMPT 2: Sistema de Layout e Navegação Desktop
+- [x] PROMPT 2: Sistema de Layout e Navegação Desktop
 - [ ] PROMPT 3: Sistema de Layout e Navegação Mobile
 - [ ] PROMPT 4: Context Global e Gerenciamento de Estado
 - [ ] PROMPT 5: Cards de Resumo Financeiro
@@ -200,3 +200,69 @@ Tentativas: N/A | Erros: 0 | Status: Análise concluída
 
 ### PROMPT 1
 Tentativas: 2 | Erros: 0 | Status: ✅ Sucesso
+**Commit**: `feat: estrutura base do projeto - PROMPT 1` (hash: c0b398f)
+
+---
+
+## PROMPT 2: Sistema de Layout e Navegação Desktop
+Status: ✅ | Data: 2025-01-XX | Build: ✅ (3 tentativas)
+
+### Implementado
+- Componente Sidebar com estados expanded/collapsed
+- Hook useSidebar para gerenciar estado (persistência no localStorage)
+- Componente SidebarItem com item ativo destacado
+- Sistema de tooltips quando sidebar colapsada (hover com delay)
+- Botão circular de alternância na borda direita
+- Transições suaves (300ms) entre estados
+- Layout principal ajusta margem esquerda fluidamente
+- Integração com React Router para item ativo
+- Perfil do usuário completo (expandido) ou apenas avatar (colapsado)
+- Sidebar aparece apenas em desktop (≥1280px), oculta em mobile/tablet
+
+### Refatoração conforme Figma MCP
+- Item ativo: fundo amarelo-esverdeado brilhante (#C4E538) conforme design
+- Logo: "Mycash" sublinhado + "+" conforme design do Figma
+- Espaçamentos: uso exclusivo de tokens semânticos e primitivos
+- Tipografia: line-height ajustado para melhor legibilidade
+- Acessibilidade: focus states no botão de alternância
+- Animações: transições suaves em todos os elementos interativos
+
+### Tokens
+**Semânticas:**
+- --color-background-primary (fundo sidebar)
+- --color-text-primary, --color-text-secondary (textos)
+- --color-button-primary, --color-button-text (botão alternância)
+- --color-accent-yellow-green (fundo item ativo - amarelo-esverdeado brilhante)
+- --color-border-light (bordas)
+- --spacing-md, --spacing-lg (padding interno)
+- --font-size-h1 (logo)
+- --font-size-body, --font-size-small (textos)
+- --font-weight-bold, --font-weight-regular
+- --border-radius-sm, --border-radius-lg, --border-radius-full
+- --shadow-sm, --shadow-md (botão, tooltip)
+
+**Primitivas:**
+- --gray-100 (hover items inativos)
+- --gray-900 (tooltip background)
+
+**Conversões realizadas:**
+- Larguras: 256px (expanded) → w-64, 80px (collapsed) → w-20
+- Transições: 300ms duration com ease-in-out
+- Delay tooltip: 300ms
+- Item ativo: fundo amarelo-esverdeado (#C4E538) ao invés de preto (conforme Figma)
+- Logo: "Mycash" sublinhado conforme design
+- Espaçamentos: uso exclusivo de tokens (px-md, py-sm, gap-md, space-y-xs)
+- Tipografia: line-height ajustado (leading-tight, leading-normal)
+- Acessibilidade: focus states e aria-labels implementados
+
+### Build
+Tentativas: 3 | Erros: 0 | Status: ✅ Sucesso
+
+**Refatoração completa conforme Figma MCP:**
+- Item ativo: fundo amarelo-esverdeado brilhante (#C4E538) conforme design
+- Logo: "Mycash" sublinhado + "+" conforme design do Figma
+- Tokens atualizados: --color-accent-yellow-green adicionado ao design system
+- Espaçamentos: uso exclusivo de tokens semânticos e primitivos
+- Tipografia: line-height ajustado para melhor legibilidade
+- Acessibilidade: focus states no botão de alternância
+- Animações: hover effects e transições suaves em todos os elementos
