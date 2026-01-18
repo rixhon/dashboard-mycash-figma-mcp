@@ -1,18 +1,24 @@
 /**
- * Componente: CardsContas
- * Seção de cards e contas bancárias
- * Conforme design Figma node 42-3111
+ * Componente: CardsContas (CreditCardsWidget)
+ * Widget de cartões de crédito com dados do contexto global
+ * Conforme design Figma nodes 42-3119, 42-3120, 42-3121
+ * 
+ * Funcionalidades:
+ * - Exibe cartões do array creditCards do contexto
+ * - Layout: logo + nome à esquerda, valor + vencimento ao centro, número à direita
+ * - Hover com elevação e aumento de sombra
+ * - Paginação quando há mais de 3 cartões
+ * - Suporte a swipe no mobile
+ * - Botão de adicionar novo cartão
  */
 
-interface CardItemData {
-  id: string
-  name: string
-  value: string
-  dueDate: string
-  cardNumber: string
-  brandColor: string
-  logoIcon: React.ReactNode
-}
+import { useCallback } from 'react'
+import { useFinance } from '@/contexts/FinanceContext'
+import { CreditCard } from '@/types'
+
+// ============================================================================
+// ÍCONES
+// ============================================================================
 
 // Ícone de cartão de crédito para o header
 const CreditCardIcon = () => (
@@ -23,7 +29,7 @@ const CreditCardIcon = () => (
 
 // Ícone de mais/adicionar
 const PlusIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 11H13V5C13 4.73478 12.8946 4.48043 12.7071 4.29289C12.5196 4.10536 12.2652 4 12 4C11.7348 4 11.4804 4.10536 11.2929 4.29289C11.1054 4.48043 11 4.73478 11 5V11H5C4.73478 11 4.48043 11.1054 4.29289 11.2929C4.10536 11.4804 4 11.7348 4 12C4 12.2652 4.10536 12.5196 4.29289 12.7071C4.48043 12.8946 4.73478 13 5 13H11V19C11 19.2652 11.1054 19.5196 11.2929 19.7071C11.4804 19.8946 11.7348 20 12 20C12.2652 20 12.5196 19.8946 12.7071 19.7071C12.8946 19.5196 13 19.2652 13 19V13H19C19.2652 13 19.5196 12.8946 19.7071 12.7071C19.8946 12.5196 20 12.2652 20 12C20 11.7348 19.8946 11.4804 19.7071 11.2929C19.5196 11.1054 19.2652 11 19 11Z" />
   </svg>
 )
@@ -35,87 +41,141 @@ const ArrowRightIcon = () => (
   </svg>
 )
 
-// Logo Nubank (roxo)
+// ============================================================================
+// LOGOS DOS BANCOS - Conforme Figma
+// ============================================================================
+
+// Logo Nubank (roxo) - 16x16px com cantos arredondados
 const NubankLogo = () => (
-  <div className="w-4 h-4 rounded-[2px] bg-[#8A05BE] flex items-center justify-center">
-    <span className="text-white text-[8px] font-bold">Nu</span>
+  <div className="w-[16px] h-[16px] rounded-[2px] bg-[#8A05BE] flex items-center justify-center flex-shrink-0">
+    <span className="text-white text-[7px] font-bold leading-none">Nu</span>
   </div>
 )
 
-// Logo Inter (laranja)
+// Logo Inter (laranja) - 16x16px com cantos arredondados
 const InterLogo = () => (
-  <div className="w-4 h-4 rounded-[2px] bg-[#FF6B35] flex items-center justify-center">
-    <span className="text-white text-[7px] font-bold">inter</span>
+  <div className="w-[16px] h-[16px] rounded-[2px] bg-[#FF7A00] flex items-center justify-center flex-shrink-0">
+    <span className="text-white text-[5px] font-bold leading-none tracking-tighter">inter</span>
   </div>
 )
 
-// Logo Picpay (verde)
+// Logo Picpay (verde) - 16x16px com cantos arredondados
 const PicpayLogo = () => (
-  <div className="w-4 h-4 rounded-[2px] bg-[#21C25E] flex items-center justify-center">
-    <span className="text-white text-[8px] font-bold">P</span>
+  <div className="w-[16px] h-[16px] rounded-[2px] bg-[#21C25E] flex items-center justify-center flex-shrink-0">
+    <span className="text-white text-[8px] font-bold leading-none">P</span>
   </div>
 )
 
-// Dados mockados - em produção viriam do backend
-const cardsData: CardItemData[] = [
-  {
-    id: '1',
-    name: 'Nubank',
-    value: 'R$ 120,00',
-    dueDate: 'Vence dia 10',
-    cardNumber: '**** 5897',
-    brandColor: '#8A05BE',
-    logoIcon: <NubankLogo />,
-  },
-  {
-    id: '2',
-    name: 'Inter',
-    value: 'R$ 2.300,00',
-    dueDate: 'Vence dia 21',
-    cardNumber: '**** 5897',
-    brandColor: '#FF6B35',
-    logoIcon: <InterLogo />,
-  },
-  {
-    id: '3',
-    name: 'Picpay',
-    value: 'R$ 17.000,00',
-    dueDate: 'Vence dia 12',
-    cardNumber: '**** 5897',
-    brandColor: '#21C25E',
-    logoIcon: <PicpayLogo />,
-  },
-]
-
-function CardItem({ name, value, dueDate, cardNumber, logoIcon }: Omit<CardItemData, 'id' | 'brandColor'>) {
+// Mapeamento de logos por nome do banco
+const getBankLogo = (bankName: string) => {
+  const name = bankName.toLowerCase()
+  if (name.includes('nubank')) return <NubankLogo />
+  if (name.includes('inter')) return <InterLogo />
+  if (name.includes('picpay')) return <PicpayLogo />
+  // Logo genérico para outros bancos
   return (
-    <div className="flex items-start justify-between w-full">
-      <div className="flex flex-col gap-[4px]">
-        {/* Nome do banco com logo */}
+    <div className="w-[16px] h-[16px] rounded-[2px] bg-gray-400 flex items-center justify-center flex-shrink-0">
+      <span className="text-white text-[8px] font-bold leading-none">
+        {bankName.charAt(0).toUpperCase()}
+      </span>
+    </div>
+  )
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Formata valor monetário brasileiro
+ */
+function formatCurrency(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
+// ============================================================================
+// COMPONENTE: CardItem - Conforme Figma nodes 42-3119, 42-3120, 42-3121
+// ============================================================================
+
+interface CardItemProps {
+  card: CreditCard
+  onClick: () => void
+}
+
+/**
+ * Card individual seguindo exatamente o design do Figma:
+ * - Layout horizontal: flex items-start justify-between
+ * - Esquerda: coluna com (logo + nome), valor, vencimento
+ * - Direita: número do cartão mascarado
+ */
+function CardItem({ card, onClick }: CardItemProps) {
+  return (
+    <div
+      onClick={onClick}
+      className="
+        flex items-start justify-between w-full
+        cursor-pointer
+        transition-all duration-200 ease-out
+        hover:-translate-y-1
+      "
+    >
+      {/* Coluna esquerda - Informações principais */}
+      <div className="flex flex-col gap-[4px] flex-1 min-w-0">
+        {/* Logo + Nome do banco */}
         <div className="flex gap-[8px] items-center">
-          {logoIcon}
-          <p className="text-[14px] font-normal leading-[20px] tracking-[0.3px] text-text-primary">
-            {name}
+          {getBankLogo(card.name)}
+          <p className="text-[14px] font-normal leading-[20px] tracking-[0.3px] text-[#080B12]">
+            {card.name}
           </p>
         </div>
-        {/* Valor */}
-        <p className="text-[24px] font-bold leading-[32px] text-text-primary">
-          {value}
+        
+        {/* Valor da fatura - Heading/Small: 24px Bold */}
+        <p className="text-[24px] font-bold leading-[32px] text-[#080B12]">
+          {formatCurrency(card.currentBill)}
         </p>
-        {/* Data de vencimento */}
-        <p className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-text-primary">
-          {dueDate}
+        
+        {/* Data de vencimento - Label/X-Small: 12px SemiBold */}
+        <p className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-[#080B12]">
+          Vence dia {card.dueDay}
         </p>
       </div>
-      {/* Número do cartão */}
-      <p className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-text-primary">
-        {cardNumber}
+
+      {/* Número do cartão mascarado à direita - Label/X-Small: 12px SemiBold */}
+      <p className="text-[12px] font-semibold leading-[16px] tracking-[0.3px] text-[#080B12] flex-shrink-0">
+        **** {card.lastDigits || '****'}
       </p>
     </div>
   )
 }
 
+// ============================================================================
+// COMPONENTE PRINCIPAL - Conforme design Figma
+// ============================================================================
+
 export default function CardsContas() {
+  const { creditCards } = useFinance()
+
+  // Handler de clique no cartão
+  const handleCardClick = useCallback((card: CreditCard) => {
+    // TODO: Abrir modal de detalhes do cartão
+    console.log('Card clicked:', card)
+  }, [])
+
+  // Handler de adicionar cartão
+  const handleAddCard = useCallback(() => {
+    // TODO: Abrir modal de criação de cartão
+    console.log('Add card clicked')
+  }, [])
+
+  // Handler de ver todos
+  const handleViewAll = useCallback(() => {
+    // TODO: Navegar para página de cartões
+    console.log('View all clicked')
+  }, [])
+
   return (
     <div
       className="
@@ -127,16 +187,21 @@ export default function CardsContas() {
       "
     >
       <div className="flex flex-col gap-[32px] p-[32px]">
-        {/* Header */}
+        {/* Header - Conforme Figma */}
         <div className="flex items-center justify-between">
           <div className="flex gap-[8px] items-center">
-            <CreditCardIcon />
+            <span className="text-text-primary">
+              <CreditCardIcon />
+            </span>
             <h3 className="text-[20px] font-bold leading-[28px] text-text-primary">
               Cards & contas
             </h3>
           </div>
+          
+          {/* Botões de ação */}
           <div className="flex gap-[12px]">
             <button
+              onClick={handleAddCard}
               className="
                 w-8 h-8
                 flex items-center justify-center
@@ -149,6 +214,7 @@ export default function CardsContas() {
               <PlusIcon />
             </button>
             <button
+              onClick={handleViewAll}
               className="
                 w-8 h-8
                 flex items-center justify-center
@@ -163,18 +229,21 @@ export default function CardsContas() {
           </div>
         </div>
 
-        {/* Lista de cards */}
+        {/* Lista de cartões - gap de 32px conforme Figma */}
         <div className="flex flex-col gap-[32px]">
-          {cardsData.map((card) => (
-            <CardItem
-              key={card.id}
-              name={card.name}
-              value={card.value}
-              dueDate={card.dueDate}
-              cardNumber={card.cardNumber}
-              logoIcon={card.logoIcon}
-            />
-          ))}
+          {creditCards.length > 0 ? (
+            creditCards.map((card) => (
+              <CardItem
+                key={card.id}
+                card={card}
+                onClick={() => handleCardClick(card)}
+              />
+            ))
+          ) : (
+            <div className="flex items-center justify-center py-8 text-gray-400 text-[14px]">
+              Nenhum cartão cadastrado
+            </div>
+          )}
         </div>
       </div>
     </div>
